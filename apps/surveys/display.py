@@ -1,3 +1,5 @@
+""" Display functions for surveys app """
+
 from __future__ import annotations
 
 from .lib import trim_decimal
