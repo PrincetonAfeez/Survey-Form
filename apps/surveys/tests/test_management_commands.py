@@ -1,3 +1,5 @@
+""" Tests for surveys app management commands """
+
 import pytest
 from apps.surveys.models import BranchRule, Survey
 from django.contrib.auth import get_user_model
