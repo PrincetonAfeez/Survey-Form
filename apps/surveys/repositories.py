@@ -1,3 +1,5 @@
+""" Repositories for surveys app """
+
 from __future__ import annotations
 
 from datetime import date
@@ -9,6 +11,7 @@ from django.db.models import Q, QuerySet
 
 from .lib import rating_value
 from .models import Answer, BranchRule, Choice, Question, Response, Survey
+from .validation import raise_validation_error, validate_answer
 
 
 class SurveyRepository:
@@ -75,17 +78,24 @@ class ResponseRepository:
         return Response.objects.select_related("survey").filter(uuid=uuid).first()
 
     @staticmethod
-    def is_resume_allowed(survey: Survey, response: Response) -> bool:
-        """Reject resume when a newer incomplete draft exists for the same survey."""
-        if response.is_complete:
+    def is_resume_allowed(response: Response, session_uuid: str | None) -> bool:
+        """
+        Reject resume when this browser session already started a newer draft.
+
+        Unrelated respondents (empty or different session) may still use their tokens.
+        """
+        if not session_uuid:
             return True
-        latest_pk = (
-            Response.objects.filter(survey=survey, completed_at__isnull=True)
-            .order_by("-started_at")
-            .values_list("pk", flat=True)
-            .first()
-        )
-        return latest_pk is None or latest_pk == response.pk
+        try:
+            session_id = UUID(str(session_uuid))
+        except (ValueError, TypeError):
+            return True
+        if session_id == response.uuid:
+            return True
+        session_response = ResponseRepository.for_respondent(session_id)
+        if session_response is None or session_response.survey_id != response.survey_id:
+            return True
+        return session_response.started_at <= response.started_at
 
     @staticmethod
     def start(survey: Survey) -> Response:
@@ -116,7 +126,9 @@ class ResponseRepository:
         answer.date_value = None
         answer.choice = None
 
-        answer.question_text_snapshot = question.text
+        # Snapshot is for display/audit; the column caps at 500 chars (full text
+        # remains on Question.text), so truncate rather than reject long prompts.
+        answer.question_text_snapshot = question.text[:500]
 
         if question.type in {Question.Type.SHORT_TEXT, Question.Type.LONG_TEXT}:
             answer.text_value = value or ""
@@ -128,6 +140,11 @@ class ResponseRepository:
             answer.choice = value
         elif question.type == Question.Type.RATING:
             answer.number_value = rating_value(value)
+
+        choice_count = len(value or []) if question.type == Question.Type.MULTIPLE_CHOICE else None
+        raise_validation_error(
+            validate_answer(answer, choice_count=choice_count, check_required=True)
+        )
 
         answer.save()
 
@@ -159,15 +176,9 @@ class ResponseRepository:
         if SurveyRepository.get_question_by_order(survey, response.current_step):
             return response.current_step
 
-        answered = (
-            response.answers.select_related("question")
-            .order_by("question__order")
-            .last()
-        )
+        answered = response.answers.select_related("question").order_by("question__order").last()
         if answered:
-            following = SurveyRepository.get_next_question_by_order(
-                survey, answered.question.order
-            )
+            following = SurveyRepository.get_next_question_by_order(survey, answered.question.order)
             step = following.order if following else answered.question.order
         else:
             step = SurveyRepository.first_question_order(survey)
@@ -203,14 +214,8 @@ class ResponseRepository:
         """Delete answers for questions not on the session path (e.g. after re-branching)."""
         if not path_question_ids:
             return 0
-        on_path = Question.objects.filter(
-            survey_id=response.survey_id, pk__in=path_question_ids
-        )
-        deleted, _ = (
-            Answer.objects.filter(response=response)
-            .exclude(question__in=on_path)
-            .delete()
-        )
+        on_path = Question.objects.filter(survey_id=response.survey_id, pk__in=path_question_ids)
+        deleted, _ = Answer.objects.filter(response=response).exclude(question__in=on_path).delete()
         return deleted
 
     @staticmethod
