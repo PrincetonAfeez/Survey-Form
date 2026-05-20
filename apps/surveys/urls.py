@@ -1,3 +1,5 @@
+""" URLs for surveys app """
+
 from django.urls import path
 
 from . import views
