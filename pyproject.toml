@@ -15,7 +15,10 @@ src = ["apps", "config"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "DJ"]
-ignore = ["DJ001"]
+# DJ001: nullable CharField intentionally avoided already.
+# DJ012: stylistic preference for save() position; our models group clean() + save()
+# together for readability since save() calls full_clean().
+ignore = ["DJ001", "DJ012"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.dev"
