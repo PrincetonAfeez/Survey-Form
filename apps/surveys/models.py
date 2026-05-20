@@ -1,3 +1,5 @@
+""" Models for surveys app """
+
 from __future__ import annotations
 
 from uuid import uuid4
@@ -7,8 +9,14 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from .constants import LONG_TEXT_MAX_LENGTH, SHORT_TEXT_MAX_LENGTH
 from .managers import AnswerQuerySet, ResponseQuerySet, SurveyQuerySet
+from .validation import (
+    raise_validation_error,
+    validate_answer,
+    validate_question,
+    validate_survey,
+    validate_survey_after_save,
+)
 
 
 class Survey(models.Model):
@@ -28,20 +36,12 @@ class Survey(models.Model):
         return self.title
 
     def clean(self) -> None:
-        errors = {}
-        if self.is_published and self.pk:
-            questions = self.questions.prefetch_related("choices")
-            if not questions.exists():
-                errors["is_published"] = "Published surveys must have at least one question."
-            for question in questions:
-                if question.accepts_choices and not question.choices.exists():
-                    errors["is_published"] = (
-                        f'Question "{question.text[:50]}" ({question.get_type_display()}) '
-                        "requires at least one choice before publishing."
-                    )
-                    break
-        if errors:
-            raise ValidationError(errors)
+        raise_validation_error(validate_survey(self))
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+        raise_validation_error(validate_survey_after_save(self))
 
 
 class Question(models.Model):
@@ -80,6 +80,9 @@ class Question(models.Model):
             Type.LIKERT,
         }
     )
+    # Types whose choices are seeded automatically by signals.seed_scale_choices.
+    # They must pass clean() without explicit choices so the signal can run.
+    _AUTO_SEEDED_TYPES = frozenset({Type.RATING, Type.LIKERT})
 
     @property
     def accepts_choices(self) -> bool:
@@ -94,15 +97,7 @@ class Question(models.Model):
         ).exists()
 
     def clean(self) -> None:
-        errors = {}
-        if self.accepts_choices and self.pk and not self.choices.exists():
-            errors["type"] = "This question type requires at least one choice."
-        if self.pk and not self.accepts_choices:
-            previous_type = Question.objects.filter(pk=self.pk).values_list("type", flat=True).first()
-            if previous_type in self._CHOICE_TYPES and self.answers_reference_choices():
-                errors["type"] = "Cannot change type: answers reference existing choices."
-        if errors:
-            raise ValidationError(errors)
+        raise_validation_error(validate_question(self))
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -153,11 +148,7 @@ class BranchRule(models.Model):
             and self.next_question.survey_id != self.question.survey_id
         ):
             errors["next_question"] = "The next question must belong to the same survey."
-        if (
-            self.next_question_id
-            and self.question_id
-            and self.next_question_id == self.question_id
-        ):
+        if self.next_question_id and self.question_id and self.next_question_id == self.question_id:
             errors["next_question"] = "The next question cannot be the same as the branch question."
         if self.question_id and self.next_question_id:
             from .pathing import branch_rule_creates_cycle
@@ -174,7 +165,6 @@ class BranchRule(models.Model):
 
 class Response(models.Model):
     uuid = models.UUIDField(unique=True, default=uuid4, editable=False)
-    resume_nonce = models.UUIDField(default=uuid4, editable=False)
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name="responses")
     current_step = models.PositiveIntegerField(default=1)
     started_at = models.DateTimeField(auto_now_add=True)
@@ -196,7 +186,8 @@ class Response(models.Model):
     def completion_seconds(self) -> int | None:
         if not self.completed_at:
             return None
-        return int((self.completed_at - self.started_at).total_seconds())
+        seconds = int((self.completed_at - self.started_at).total_seconds())
+        return max(0, seconds)
 
     def mark_complete(self) -> None:
         self.completed_at = timezone.now()
@@ -234,67 +225,7 @@ class Answer(models.Model):
         return self.question_text_snapshot or self.question.text
 
     def clean(self) -> None:
-        errors = {}
-        qtype = self.question.type
-        has_text = bool(self.text_value)
-        has_number = self.number_value is not None
-        has_date = self.date_value is not None
-        has_choice = self.choice_id is not None
-
-        if qtype in {Question.Type.SHORT_TEXT, Question.Type.LONG_TEXT}:
-            if has_number or has_date or has_choice:
-                errors["text_value"] = (
-                    "Text answers cannot also store number, date, or choice data."
-                )
-            if (
-                qtype == Question.Type.SHORT_TEXT
-                and self.text_value
-                and len(self.text_value) > SHORT_TEXT_MAX_LENGTH
-            ):
-                errors["text_value"] = (
-                    f"Short text answers cannot exceed {SHORT_TEXT_MAX_LENGTH} characters."
-                )
-            if (
-                qtype == Question.Type.LONG_TEXT
-                and self.text_value
-                and len(self.text_value) > LONG_TEXT_MAX_LENGTH
-            ):
-                errors["text_value"] = (
-                    f"Long text answers cannot exceed {LONG_TEXT_MAX_LENGTH} characters."
-                )
-        elif qtype == Question.Type.NUMBER:
-            if has_text or has_date or has_choice:
-                errors["number_value"] = (
-                    "Number answers cannot also store text, date, or choice data."
-                )
-        elif qtype == Question.Type.DATE:
-            if has_text or has_number or has_choice:
-                errors["date_value"] = (
-                    "Date answers cannot also store text, number, or choice data."
-                )
-        elif qtype == Question.Type.RATING:
-            if has_text or has_date or has_choice:
-                errors["number_value"] = "Rating answers are stored as a number only."
-        elif qtype in {Question.Type.SINGLE_CHOICE, Question.Type.LIKERT}:
-            if has_text or has_number or has_date:
-                errors["choice"] = "Choice answers cannot also store text, number, or date data."
-            if self.choice_id and self.choice.question_id != self.question_id:
-                errors["choice"] = "Selected choice must belong to the answered question."
-        elif qtype == Question.Type.MULTIPLE_CHOICE:
-            if has_text or has_number or has_date or has_choice:
-                errors["choices"] = (
-                    "Multiple-choice answers are stored only in the choices relation."
-                )
-
-        if (
-            self.response_id
-            and self.question_id
-            and self.response.survey_id != self.question.survey_id
-        ):
-            errors["question"] = "The answer question must belong to the response survey."
-
-        if errors:
-            raise ValidationError(errors)
+        raise_validation_error(validate_answer(self))
 
     def save(self, *args, **kwargs):
         self.full_clean()
