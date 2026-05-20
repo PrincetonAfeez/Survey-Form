@@ -1,9 +1,11 @@
+""" Tests for surveys app forms """
+
 from datetime import date
 from decimal import Decimal
 
 import pytest
-from apps.surveys.lib import trim_decimal
 from apps.surveys.forms import QuestionForm, _initial_for, form_for_question
+from apps.surveys.lib import trim_decimal
 from apps.surveys.models import Answer, Question
 from apps.surveys.repositories import ResponseRepository
 
@@ -106,9 +108,7 @@ def test_form_for_unsupported_type_raises():
     from apps.surveys.models import Survey
 
     survey = Survey.objects.create(title="Bad", slug="bad-type")
-    q = Question.objects.create(
-        survey=survey, order=1, text="?", type=Question.Type.SHORT_TEXT
-    )
+    q = Question.objects.create(survey=survey, order=1, text="?", type=Question.Type.SHORT_TEXT)
     Question.objects.filter(pk=q.pk).update(type="not_real")
     q.refresh_from_db()
     with pytest.raises(ValueError, match="Unsupported"):
