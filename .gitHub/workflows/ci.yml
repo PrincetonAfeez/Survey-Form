@@ -29,4 +29,4 @@ jobs:
       - name: Test with coverage
         run: |
           coverage run -m pytest -q
-          coverage report --fail-under=99 --include="apps/surveys/*" --omit="*/migrations/*,*/tests/*"
+          coverage report --fail-under=100 --include="apps/surveys/*" --omit="*/migrations/*,*/tests/*"
