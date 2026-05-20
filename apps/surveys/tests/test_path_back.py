@@ -1,4 +1,4 @@
-"""Unit tests for session path helpers used by back navigation."""
+""" Unit tests for session path helpers used by back navigation """
 
 import pytest
 from apps.surveys.views import (
