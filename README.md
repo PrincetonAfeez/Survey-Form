@@ -11,7 +11,7 @@ A Django 5 survey application with a server-rendered HTMX wizard, signed resume 
 - django-environ for settings via `.env` / `DATABASE_URL`
 - SQLite for development; PostgreSQL-ready production settings through `DATABASE_URL`
 - pytest-django, hypothesis (property tests on aggregators), ruff, black (local format), coverage
-- **261 tests**, **100%** line coverage on `apps/surveys` (see `pyproject.toml` / `make coverage`)
+- **334 tests**, **100%** line coverage on `apps/surveys` (see `pyproject.toml` / `make coverage`)
 
 ## Quick Start
 
@@ -68,17 +68,21 @@ The core domain lives in `apps/surveys/`:
 - `forms.py` — `form_for_question()` dynamic forms per question type
 - `aggregators.py` — per-question results summaries and response metrics for the staff dashboard
 - `tokens.py` — `issue_resume_token()` / `verify_resume_token()`
+- `validation.py` — single source of truth for publish rules and answer shape (see `docs/validation.md`)
+- `schema_contract.py` — JSON Schema export aligned with `Schema/django-*.schema.json`
+- `constants.py` — shared field limits (`SHORT_TEXT_MAX_LENGTH`, `LONG_TEXT_MAX_LENGTH`)
+- `lib.py` — `trim_decimal`, `rating_value` (shared helpers)
 - `display.py` — answer formatting for exports and raw tables
 - `templatetags/survey_extras.py` — `trim_decimal`, `duration`, `answer_display` template filters
 - `managers.py` — custom querysets (`published`, `complete`, etc.)
 - `signals.py` — auto-seed rating/likert choices; prune choices when a question type no longer accepts them
 - `admin.py` — survey authoring inlines, post-save validation, Preview / Results links
 
-Design notes: `docs/adr/` (seven architecture decision records). Full spec: `Survey Form.txt`.
+Design notes: `docs/adr/` (seven architecture decision records), **`docs/validation.md`** (end-to-end validation), **`Schema/README.md`** (JSON Schema export). Full spec: `Survey Form.txt`.
 
 Settings layout: `config/settings/base.py`, `dev.py`, `prod.py`.
 
-SQLite is intended for local development only; concurrent writes to the same answer can raise `OperationalError` (the step view retries once). Use PostgreSQL in production.
+SQLite is intended for local development only; concurrent writes to the same answer may raise `OperationalError`. Use PostgreSQL for multi-user deployments.
 
 ## Useful Commands
 
