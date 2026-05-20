@@ -46,6 +46,42 @@ def test_runner_falls_back_to_next_order(branching_survey):
 
 
 @pytest.mark.django_db
+def test_submit_rolls_back_when_step_update_fails(branching_survey, monkeypatch):
+    survey, q1, _q2, _q3, remote = branching_survey
+    response = ResponseRepository.start(survey)
+    runner = SurveyRunner(survey, response)
+
+    def fail_move(*_args, **_kwargs):
+        raise RuntimeError("simulated failure after save")
+
+    monkeypatch.setattr(ResponseRepository, "move_to_step", fail_move)
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        runner.submit({"value": str(remote.id)}, step=1)
+
+    assert not response.answers.filter(question=q1).exists()
+
+
+@pytest.mark.django_db
+def test_submit_rolls_back_completion_when_prune_fails(branching_survey, monkeypatch):
+    survey, q1, _q2, q3, remote = branching_survey
+    response = ResponseRepository.start(survey)
+    runner = SurveyRunner(survey, response)
+    runner.submit({"value": str(remote.id)}, step=1)
+
+    def fail_prune(*_args, **_kwargs):
+        raise RuntimeError("simulated prune failure")
+
+    monkeypatch.setattr(runner, "_discard_off_route_answers", fail_prune)
+    rating = q3.choices.get(label="4")
+    with pytest.raises(RuntimeError, match="simulated prune"):
+        runner.submit({"value": str(rating.id)}, step=q3.order)
+
+    response.refresh_from_db()
+    assert response.is_complete is False
+    assert response.completed_at is None
+
+
+@pytest.mark.django_db
 def test_runner_submit_invalid_returns_early(branching_survey):
     survey, *_ = branching_survey
     response = ResponseRepository.start(survey)

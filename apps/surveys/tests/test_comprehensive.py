@@ -50,7 +50,98 @@ def test_format_validation_error_str_fallback_without_dict_or_messages():
             raise AttributeError
 
     exc = Bare("fallback")
-    assert _format_validation_error(exc) == str(exc)
+    assert _format_validation_error(exc) == "fallback"
+
+
+def test_format_validation_error_messages_iterator_raises():
+    class IteratorRaises(ValidationError):
+        @property
+        def error_dict(self):
+            raise AttributeError
+
+        @property
+        def messages(self):
+            class Broken:
+                def __iter__(self):
+                    raise AttributeError("broken")
+
+            return Broken()
+
+    exc = IteratorRaises.__new__(IteratorRaises)
+    object.__setattr__(exc, "message", None)
+    object.__setattr__(exc, "error_list", [])
+    exc.args = ("final",)
+    assert _format_validation_error(exc) == "final"
+
+
+def test_format_validation_error_error_list_string():
+    exc = ValidationError.__new__(ValidationError)
+    object.__setattr__(exc, "error_list", ["list-only"])
+    object.__setattr__(exc, "message", None)
+    exc.args = ()
+    assert _format_validation_error(exc) == "list-only"
+
+
+def test_format_validation_error_error_list_property_raises():
+    class ListRaises(ValidationError):
+        @property
+        def error_dict(self):
+            raise AttributeError
+
+        @property
+        def error_list(self):
+            raise AttributeError
+
+    exc = ListRaises.__new__(ListRaises)
+    object.__setattr__(exc, "message", None)
+    exc.args = ("args-win",)
+    assert _format_validation_error(exc) == "args-win"
+
+
+def test_format_validation_error_empty_error_dict():
+    assert _format_validation_error(ValidationError({}))
+
+
+def test_format_validation_error_str_exc_fallback():
+    class Plain(ValidationError):
+        @property
+        def error_dict(self):
+            raise AttributeError
+
+        @property
+        def messages(self):
+            raise AttributeError
+
+        @property
+        def error_list(self):
+            raise AttributeError
+
+        def __str__(self):
+            return "plain-text"
+
+    exc = Plain.__new__(Plain)
+    object.__setattr__(exc, "message", None)
+    exc.args = ()
+    assert _format_validation_error(exc) == "plain-text"
+
+
+def test_format_validation_error_args_fallback():
+    class ArgOnly(ValidationError):
+        @property
+        def error_dict(self):
+            raise AttributeError
+
+        @property
+        def messages(self):
+            raise AttributeError
+
+        @property
+        def error_list(self):
+            raise AttributeError
+
+    exc = ArgOnly.__new__(ArgOnly)
+    exc.args = ("args-only",)
+    assert _format_validation_error(exc) == "args-only"
 
 
 @pytest.mark.django_db
@@ -294,25 +385,72 @@ def test_record_forward_appends_from_order_when_tail_differs(branching_survey):
     survey, q1, q2, q3, _remote = branching_survey
     factory = RequestFactory()
     request = factory.get("/")
-    request.session = {f"survey_path_{survey.id}": [q1.order]}
-    _record_forward(request, survey, q2.order, q3.order, preview=False)
-    assert request.session[f"survey_path_{survey.id}"] == [q1.order, q2.order, q3.order]
+    request.session = {f"survey_path_{survey.id}": [q1.id]}
+    _record_forward(request, survey, q2, q3, preview=False)
+    assert request.session[f"survey_path_{survey.id}"] == [q1.id, q2.id, q3.id]
+
+
+@pytest.mark.django_db
+def test_get_path_coerces_string_question_ids(branching_survey):
+    from apps.surveys.views import _get_path, _path_key
+
+    survey, q1, q2, *_ = branching_survey
+    factory = RequestFactory()
+    request = factory.get("/")
+    request.session = {_path_key(survey): [str(q1.id), "bad", str(q2.id), None]}
+    assert _get_path(request, survey) == [q1.id, q2.id]
+
+
+@pytest.mark.django_db
+def test_set_path_accepts_empty_path(branching_survey):
+    from apps.surveys.views import _get_path, _set_path
+
+    survey, *_ = branching_survey
+    factory = RequestFactory()
+    request = factory.get("/")
+    request.session = {}
+    _set_path(request, survey, [])
+    assert _get_path(request, survey) == []
+
+
+@pytest.mark.django_db
+def test_set_path_dedupes_adjacent_question_ids(branching_survey):
+    from apps.surveys.views import _get_path, _set_path
+
+    survey, q1, *_ = branching_survey
+    factory = RequestFactory()
+    request = factory.get("/")
+    request.session = {}
+    _set_path(request, survey, [q1.id, q1.id])
+    assert _get_path(request, survey) == [q1.id]
+
+
+@pytest.mark.django_db
+def test_record_forward_dedupes_adjacent_tail(branching_survey):
+    from apps.surveys.views import _record_forward
+
+    survey, q1, q2, q3, _remote = branching_survey
+    factory = RequestFactory()
+    request = factory.get("/")
+    request.session = {f"survey_path_{survey.id}": [q1.id, q1.id, q2.id]}
+    _record_forward(request, survey, q2, q3, preview=False)
+    assert request.session[f"survey_path_{survey.id}"] == [q1.id, q2.id, q3.id]
 
 
 @pytest.mark.django_db
 def test_path_helpers_preview_prefix(branching_survey):
     from apps.surveys.views import _get_path, _init_path, _path_key, _set_path
 
-    survey, q1, *_ = branching_survey
+    survey, q1, q2, *_ = branching_survey
     factory = RequestFactory()
     request = factory.get("/")
     request.session = {}
 
     assert _path_key(survey, preview=True) == f"survey_preview_path_{survey.id}"
-    _init_path(request, survey, q1.order, preview=True)
-    assert _get_path(request, survey, preview=True) == [q1.order]
-    _set_path(request, survey, [q1.order, 2], preview=True)
-    assert _get_path(request, survey, preview=True) == [q1.order, 2]
+    _init_path(request, survey, q1, preview=True)
+    assert _get_path(request, survey, preview=True) == [q1.id]
+    _set_path(request, survey, [q1.id, q2.id], preview=True)
+    assert _get_path(request, survey, preview=True) == [q1.id, q2.id]
 
 
 @pytest.mark.django_db
@@ -332,7 +470,7 @@ def test_start_survey_force_new(client, branching_survey):
         {"force_new": "1"},
     )
     assert response.status_code == 302
-    assert survey.responses.count() == 2
+    assert survey.responses.count() == 1
 
 
 @pytest.mark.django_db
@@ -369,3 +507,42 @@ def test_results_raw_htmx_partial(staff_user, client, branching_survey):
     )
     assert response.status_code == 200
     assert b"<table" in response.content.lower() or b"table" in response.content.lower()
+
+
+@pytest.mark.django_db
+def test_submit_with_db_retry_recovers_from_operational_error(branching_survey):
+    from django.db import OperationalError
+
+    from apps.surveys.views import _submit_with_db_retry
+
+    survey, q1, *_rest, remote = branching_survey
+    response = ResponseRepository.start(survey)
+    runner = SurveyRunner(survey, response)
+    real_submit = SurveyRunner.submit
+    calls = {"n": 0}
+
+    def flaky_submit(self, payload, *, step=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OperationalError("database is locked")
+        return real_submit(self, payload, step=step)
+
+    with patch.object(SurveyRunner, "submit", flaky_submit):
+        result = _submit_with_db_retry(
+            runner, {"value": str(remote.id)}, step=q1.order
+        )
+    assert result.ok
+    assert calls["n"] == 2
+
+
+@pytest.mark.django_db
+def test_submit_with_db_retry_reraises_after_second_operational_error(branching_survey):
+    from django.db import OperationalError
+
+    from apps.surveys.views import _submit_with_db_retry
+
+    survey, q1, *_ = branching_survey
+    runner = SurveyRunner(survey, ResponseRepository.start(survey))
+    with patch.object(SurveyRunner, "submit", side_effect=OperationalError("locked")):
+        with pytest.raises(OperationalError):
+            _submit_with_db_retry(runner, {}, step=q1.order)

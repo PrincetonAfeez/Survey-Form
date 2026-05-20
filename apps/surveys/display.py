@@ -1,18 +1,7 @@
 from __future__ import annotations
 
-from decimal import Decimal
-
+from .lib import trim_decimal
 from .models import Answer, Question
-
-
-def trim_decimal(value) -> str:
-    if value is None:
-        return "N/A"
-    if isinstance(value, Decimal):
-        value = value.normalize()
-        text = format(value, "f")
-        return text.rstrip("0").rstrip(".") if "." in text else text
-    return str(value)
 
 
 def format_answer_value(answer: Answer | None) -> str:

@@ -36,9 +36,10 @@ def test_survey_intro_shows_continue_for_in_progress(client, branching_survey):
 
 
 @pytest.mark.django_db
-def test_unpublished_survey_returns_404(client, unpublished_survey):
+def test_unpublished_survey_returns_unavailable_page(client, unpublished_survey):
     response = client.get(reverse("surveys:intro", args=[unpublished_survey.slug]))
-    assert response.status_code == 404
+    assert response.status_code == 403
+    assert b"no longer accepting responses" in response.content
 
 
 @pytest.mark.django_db

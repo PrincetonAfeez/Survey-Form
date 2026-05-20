@@ -1,5 +1,5 @@
 from apps.surveys.display import format_answer_value
-from apps.surveys.display import trim_decimal as _trim_decimal
+from apps.surveys.lib import trim_decimal as _trim_decimal
 from django import template
 
 register = template.Library()

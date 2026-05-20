@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django import forms
+from django.db import transaction
 
 from .forms import form_for_question
 from .models import Choice, Question, Response, Survey
 from .navigation import choice_from_saved_response, next_question as navigate_next
-from .pathing import build_path_from_response
+from .pathing import build_path_from_response, walk_path_from_response
 from .repositories import ResponseRepository, SurveyRepository
 
 
@@ -79,6 +80,7 @@ class SurveyRunner:
             instance = ResponseRepository.answer_for(self.response, question)
         return form_for_question(question, data=data, instance=instance)
 
+    @transaction.atomic
     def submit(self, payload: dict, *, step: int | None = None) -> SubmitResult:
         question = self.question_for_step(step or self.step_number())
         if question is None:
@@ -127,7 +129,7 @@ class SurveyRunner:
 
     def _discard_off_route_answers(self) -> None:
         """After completion, drop saved answers for questions the final route skipped."""
-        route = build_path_from_response(self.survey, self.response)
+        route = walk_path_from_response(self.survey, self.response)
         ResponseRepository.prune_answers_off_path(self.response, route)
 
     @staticmethod

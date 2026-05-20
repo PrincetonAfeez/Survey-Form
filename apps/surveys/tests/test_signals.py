@@ -1,6 +1,9 @@
 import pytest
+from apps.surveys.display import format_answer_value
 from apps.surveys.models import Choice, Question, Survey
+from apps.surveys.repositories import ResponseRepository
 from apps.surveys.signals import LIKERT_LABELS, RATING_LABELS, seed_scale_choices
+from django.core.exceptions import ValidationError
 
 
 @pytest.mark.django_db
@@ -55,6 +58,67 @@ def test_signal_deletes_choices_when_type_no_longer_accepts_choices():
     question.save()
 
     assert question.choices.count() == 0
+
+
+@pytest.mark.django_db
+def test_question_type_change_rejected_when_answers_reference_choices():
+    survey = Survey.objects.create(title="Sig", slug="sig-loss")
+    question = Question.objects.create(
+        survey=survey, order=1, text="Pick", type=Question.Type.SINGLE_CHOICE
+    )
+    choice = Choice.objects.create(question=question, order=1, label="Some Important Answer")
+    response = ResponseRepository.start(survey)
+    answer = ResponseRepository.save_answer(response, question, {"value": choice})
+    assert format_answer_value(answer) == "Some Important Answer"
+
+    question.type = Question.Type.SHORT_TEXT
+    with pytest.raises(ValidationError) as exc:
+        question.save()
+
+    assert "answers reference" in str(exc.value).lower()
+    question.refresh_from_db()
+    assert question.type == Question.Type.SINGLE_CHOICE
+    assert Choice.objects.filter(pk=choice.pk).exists()
+    answer.refresh_from_db()
+    assert answer.choice_id == choice.pk
+    assert format_answer_value(answer) == "Some Important Answer"
+
+
+@pytest.mark.django_db
+def test_answers_reference_choices_false_for_unsaved_question():
+    question = Question(
+        survey=Survey(title="X", slug="x"),
+        order=1,
+        text="?",
+        type=Question.Type.SINGLE_CHOICE,
+    )
+    assert question.answers_reference_choices() is False
+
+
+@pytest.mark.django_db
+def test_signal_raises_when_cleanup_would_drop_answered_choices(branching_survey):
+    survey, q1, *_q2, _q3, remote = branching_survey
+    response = ResponseRepository.start(survey)
+    ResponseRepository.save_answer(response, q1, {"value": remote})
+    q1.type = Question.Type.SHORT_TEXT
+    with pytest.raises(ValidationError, match="answers reference"):
+        seed_scale_choices(sender=Question, instance=q1, created=False)
+
+
+@pytest.mark.django_db
+def test_question_type_change_rejected_for_multiple_choice_answers(full_survey):
+    response = ResponseRepository.start(full_survey["survey"])
+    ResponseRepository.save_answer(
+        response,
+        full_survey["multi"],
+        {"value": [full_survey["multi_a"], full_survey["multi_b"]]},
+    )
+    question = full_survey["multi"]
+    question.type = Question.Type.LONG_TEXT
+    with pytest.raises(ValidationError):
+        question.save()
+    question.refresh_from_db()
+    assert question.type == Question.Type.MULTIPLE_CHOICE
 
 
 @pytest.mark.django_db

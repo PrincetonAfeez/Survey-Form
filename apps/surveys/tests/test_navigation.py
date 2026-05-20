@@ -47,10 +47,10 @@ def test_on_page_back_after_browser_back_one_click_per_step(client, branching_su
     survey, q1, _q2, q3, remote = branching_survey
     client.post(reverse("surveys:start", args=[survey.slug]))
     client.post(reverse("surveys:step", args=[survey.slug, 1]), {"value": remote.id})
-    assert client.session[f"survey_path_{survey.id}"] == [q1.order, q3.order]
+    assert client.session[f"survey_path_{survey.id}"] == [q1.id, q3.id]
 
     client.get(reverse("surveys:step", args=[survey.slug, q1.order]))
-    assert client.session[f"survey_path_{survey.id}"] == [q1.order]
+    assert client.session[f"survey_path_{survey.id}"] == [q1.id]
 
     response = client.get(reverse("surveys:step_back", args=[survey.slug, q1.order]))
     assert response.status_code == 302
@@ -64,10 +64,10 @@ def test_on_page_back_from_step_two_after_browser_back(client, branching_survey)
     client.post(reverse("surveys:start", args=[survey.slug]))
     client.post(reverse("surveys:step", args=[survey.slug, 1]), {"value": office.id})
     client.post(reverse("surveys:step", args=[survey.slug, 2]), {"value": "15"})
-    assert client.session[f"survey_path_{survey.id}"] == [1, 2, 3]
+    assert client.session[f"survey_path_{survey.id}"] == [q1.id, q2.id, q3.id]
 
     client.get(reverse("surveys:step", args=[survey.slug, q2.order]))
-    assert client.session[f"survey_path_{survey.id}"] == [1, 2]
+    assert client.session[f"survey_path_{survey.id}"] == [q1.id, q2.id]
 
     response = client.get(reverse("surveys:step_back", args=[survey.slug, q2.order]))
     assert response.status_code == 302

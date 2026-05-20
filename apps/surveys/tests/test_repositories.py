@@ -3,7 +3,8 @@ from decimal import Decimal
 
 import pytest
 from apps.surveys.models import BranchRule, Choice, Question, Survey
-from apps.surveys.repositories import ResponseRepository, SurveyRepository, rating_value
+from apps.surveys.lib import rating_value
+from apps.surveys.repositories import ResponseRepository, SurveyRepository
 from django.core.exceptions import ValidationError
 
 
@@ -104,6 +105,30 @@ def test_save_answer_updates_existing_row(full_survey):
     ResponseRepository.save_answer(response, full_survey["short"], {"value": "second"})
     assert response.answers.count() == 1
     assert response.answers.get().text_value == "second"
+
+
+@pytest.mark.django_db
+def test_save_answer_multiple_choice_sets_m2m(full_survey):
+    response = ResponseRepository.start(full_survey["survey"])
+    answer = ResponseRepository.save_answer(
+        response,
+        full_survey["multi"],
+        {"value": [full_survey["multi_a"], full_survey["multi_b"]]},
+    )
+    assert set(answer.choices.values_list("label", flat=True)) == {"A", "B"}
+
+
+@pytest.mark.django_db
+def test_save_answer_avoids_redundant_saves_on_update(full_survey):
+    """Regression: reset+final double save used to run ~18 queries per update."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    response = ResponseRepository.start(full_survey["survey"])
+    ResponseRepository.save_answer(response, full_survey["short"], {"value": "warmup"})
+    with CaptureQueriesContext(connection) as ctx:
+        ResponseRepository.save_answer(response, full_survey["short"], {"value": "hello"})
+    assert len(ctx.captured_queries) < 18
 
 
 @pytest.mark.django_db

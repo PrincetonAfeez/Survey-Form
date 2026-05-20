@@ -70,8 +70,8 @@ def test_start_force_new_creates_fresh_response(client, branching_survey):
         {"force_new": "1"},
     )
     assert response.status_code == 302
-    assert survey.responses.count() == 2
-    assert survey.responses.order_by("-started_at").first().uuid != first_uuid
+    assert survey.responses.count() == 1
+    assert survey.responses.get().uuid != first_uuid
 
 
 @pytest.mark.django_db

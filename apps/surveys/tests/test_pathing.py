@@ -49,7 +49,7 @@ def test_build_path_terminates_when_branch_cycle_exists_in_db():
     response.save(update_fields=["current_step"])
 
     path = build_path_from_response(survey, response)
-    assert path == [1, 3]
+    assert path == [q1.id, q3.id]
     assert len(path) <= survey.questions.count()
 
 
@@ -124,6 +124,6 @@ def test_prune_answers_off_path_repository(branching_survey):
     response = ResponseRepository.start(survey)
     ResponseRepository.save_answer(response, q1, {"value": remote})
     ResponseRepository.save_answer(response, q3, {"value": q3.choices.get(label="4")})
-    deleted = ResponseRepository.prune_answers_off_path(response, [q1.order])
+    deleted = ResponseRepository.prune_answers_off_path(response, [q1.id])
     assert deleted == 1
     assert response.answers.count() == 1

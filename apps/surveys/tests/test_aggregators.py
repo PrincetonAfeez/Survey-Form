@@ -167,7 +167,11 @@ def test_aggregate_question_unsupported_type_raises():
     from apps.surveys.models import Question, Survey
 
     survey = Survey.objects.create(title="X", slug="x-agg")
-    q = Question.objects.create(survey=survey, order=1, text="?", type="bogus")
+    q = Question.objects.create(
+        survey=survey, order=1, text="?", type=Question.Type.SHORT_TEXT
+    )
+    Question.objects.filter(pk=q.pk).update(type="bogus")
+    q.refresh_from_db()
     with pytest.raises(ValueError, match="Unsupported"):
         aggregate_question(q)
 

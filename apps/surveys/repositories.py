@@ -7,6 +7,7 @@ from uuid import UUID
 from django.db import transaction
 from django.db.models import Q, QuerySet
 
+from .lib import rating_value
 from .models import Answer, BranchRule, Choice, Question, Response, Survey
 
 
@@ -18,6 +19,10 @@ class SurveyRepository:
     @staticmethod
     def get_by_slug(slug: str) -> Survey | None:
         return Survey.objects.published().filter(slug=slug).first()
+
+    @staticmethod
+    def get_by_slug_any(slug: str) -> Survey | None:
+        return Survey.objects.filter(slug=slug).first()
 
     @staticmethod
     def get_for_preview(survey_id: int | str, user) -> Survey | None:
@@ -39,6 +44,10 @@ class SurveyRepository:
     @staticmethod
     def get_question_by_order(survey: Survey, order: int) -> Question | None:
         return survey.questions.prefetch_related("choices").filter(order=order).first()
+
+    @staticmethod
+    def get_question_by_id(survey: Survey, question_id: int) -> Question | None:
+        return survey.questions.prefetch_related("choices").filter(pk=question_id).first()
 
     @staticmethod
     def get_next_question_by_order(survey: Survey, order: int) -> Question | None:
@@ -64,6 +73,19 @@ class ResponseRepository:
     @staticmethod
     def for_respondent(uuid: UUID | str) -> Response | None:
         return Response.objects.select_related("survey").filter(uuid=uuid).first()
+
+    @staticmethod
+    def is_resume_allowed(survey: Survey, response: Response) -> bool:
+        """Reject resume when a newer incomplete draft exists for the same survey."""
+        if response.is_complete:
+            return True
+        latest_pk = (
+            Response.objects.filter(survey=survey, completed_at__isnull=True)
+            .order_by("-started_at")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        return latest_pk is None or latest_pk == response.pk
 
     @staticmethod
     def start(survey: Survey) -> Response:
@@ -93,8 +115,8 @@ class ResponseRepository:
         answer.number_value = None
         answer.date_value = None
         answer.choice = None
-        answer.save()
-        answer.choices.clear()
+
+        answer.question_text_snapshot = question.text
 
         if question.type in {Question.Type.SHORT_TEXT, Question.Type.LONG_TEXT}:
             answer.text_value = value or ""
@@ -104,14 +126,16 @@ class ResponseRepository:
             answer.date_value = value
         elif question.type in {Question.Type.SINGLE_CHOICE, Question.Type.LIKERT}:
             answer.choice = value
-        elif question.type == Question.Type.MULTIPLE_CHOICE:
-            answer.save()
-            answer.choices.set(value)
-            return answer
         elif question.type == Question.Type.RATING:
             answer.number_value = rating_value(value)
 
         answer.save()
+
+        if question.type == Question.Type.MULTIPLE_CHOICE:
+            answer.choices.set(value or [])
+        else:
+            answer.choices.clear()
+
         return answer
 
     @staticmethod
@@ -127,12 +151,40 @@ class ResponseRepository:
         return response
 
     @staticmethod
+    def sync_current_step(survey: Survey, response: Response) -> int:
+        """
+        Ensure current_step points at an existing question; repair after admin edits.
+        Returns the order to use for redirects.
+        """
+        if SurveyRepository.get_question_by_order(survey, response.current_step):
+            return response.current_step
+
+        answered = (
+            response.answers.select_related("question")
+            .order_by("question__order")
+            .last()
+        )
+        if answered:
+            following = SurveyRepository.get_next_question_by_order(
+                survey, answered.question.order
+            )
+            step = following.order if following else answered.question.order
+        else:
+            step = SurveyRepository.first_question_order(survey)
+            if step is None:
+                raise ValueError("Survey has no questions.")
+
+        ResponseRepository.move_to_step(response, step)
+        return step
+
+    @staticmethod
     def filter_by_answer_query(queryset, query: str):
         text = query.strip()
         if not text:
             return queryset
         filters = (
             Q(answers__text_value__icontains=text)
+            | Q(answers__question_text_snapshot__icontains=text)
             | Q(answers__choice__label__icontains=text)
             | Q(answers__choices__label__icontains=text)
         )
@@ -147,11 +199,13 @@ class ResponseRepository:
         return queryset.filter(filters).distinct()
 
     @staticmethod
-    def prune_answers_off_path(response: Response, path: list[int]) -> int:
+    def prune_answers_off_path(response: Response, path_question_ids: list[int]) -> int:
         """Delete answers for questions not on the session path (e.g. after re-branching)."""
-        if not path:
+        if not path_question_ids:
             return 0
-        on_path = Question.objects.filter(survey_id=response.survey_id, order__in=path)
+        on_path = Question.objects.filter(
+            survey_id=response.survey_id, pk__in=path_question_ids
+        )
         deleted, _ = (
             Answer.objects.filter(response=response)
             .exclude(question__in=on_path)
@@ -167,12 +221,3 @@ class ResponseRepository:
             .order_by("-started_at")
         )
         return queryset.complete() if complete_only else queryset
-
-
-def rating_value(value: Choice | None) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        return Decimal(value.label)
-    except (InvalidOperation, TypeError):
-        return Decimal(value.order)

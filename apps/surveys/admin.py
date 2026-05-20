@@ -16,7 +16,22 @@ def _format_validation_error(exc: ValidationError) -> str:
                 parts.append(f"{label}: {err}")
         return " ".join(parts) if parts else str(exc)
     if hasattr(exc, "messages"):
-        return " ".join(str(m) for m in exc.messages)
+        try:
+            return " ".join(str(m) for m in exc.messages)
+        except AttributeError:
+            pass
+    message = getattr(exc, "message", None)
+    if isinstance(message, str) and message:
+        return message
+    try:
+        error_list = list(exc.error_list)
+    except AttributeError:
+        error_list = None
+    if error_list is not None and len(error_list) == 1 and isinstance(error_list[0], str):
+        return error_list[0]
+    args = getattr(exc, "args", ())
+    if len(args) == 1 and isinstance(args[0], str):
+        return args[0]
     return str(exc)
 
 
@@ -117,9 +132,6 @@ class ChoiceAdmin(admin.ModelAdmin):
 class BranchRuleAdmin(admin.ModelAdmin):
     list_display = ("question", "choice", "next_question")
     list_filter = ("question__survey",)
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
 
 
 class AnswerInline(admin.TabularInline):

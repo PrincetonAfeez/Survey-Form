@@ -11,12 +11,33 @@ from .navigation import choice_from_saved_response, next_question
 from .repositories import SurveyRepository
 
 
-def build_path_from_response(survey: Survey, response: Response) -> list[int]:
-    """
-    Reconstruct the question-order path from saved answers and branching rules.
+def answered_question_ids(response: Response) -> list[int]:
+    """Question primary keys with saved answers, in survey order."""
+    seen: set[int] = set()
+    ordered: list[int] = []
+    for question_id in (
+        response.answers.order_by("question__order").values_list("question_id", flat=True)
+    ):
+        if question_id not in seen:
+            seen.add(question_id)
+            ordered.append(question_id)
+    return ordered
 
-    Stops at current_step, on a branch cycle, or after at most question_count steps.
-    """
+
+def merge_path_with_answered(path_ids: list[int], response: Response) -> list[int]:
+    """Keep answered questions in path even if admin reordering breaks the walk."""
+    merged: list[int] = []
+    for question_id in answered_question_ids(response):
+        if question_id not in merged:
+            merged.append(question_id)
+    for question_id in path_ids:
+        if question_id not in merged:
+            merged.append(question_id)
+    return merged
+
+
+def walk_path_from_response(survey: Survey, response: Response) -> list[int]:
+    """Branch-following path of question ids (no merge with orphan answers)."""
     first_order = SurveyRepository.first_question_order(survey)
     if first_order is None:
         return []
@@ -27,16 +48,25 @@ def build_path_from_response(survey: Survey, response: Response) -> list[int]:
     limit = survey.questions.count() + 1
 
     while question is not None and len(path) < limit:
-        order = question.order
-        if order in visited:
+        question_id = question.id
+        if question_id in visited:
             break
-        visited.add(order)
-        path.append(order)
-        if order == response.current_step:
+        visited.add(question_id)
+        path.append(question_id)
+        if question.order == response.current_step:
             return path
         choice = choice_from_saved_response(response, question)
         question = next_question(survey, question, choice)
     return path
+
+
+def build_path_from_response(survey: Survey, response: Response) -> list[int]:
+    """
+    Reconstruct the session path from saved answers and branching rules.
+
+    Merges in any answered question ids so reordering does not drop saved answers.
+    """
+    return merge_path_with_answered(walk_path_from_response(survey, response), response)
 
 
 def branch_rule_creates_cycle(rule: BranchRule) -> bool:

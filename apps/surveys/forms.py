@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from django import forms
 
-from .display import trim_decimal
+from .constants import LONG_TEXT_MAX_LENGTH, SHORT_TEXT_MAX_LENGTH
+from .lib import rating_value, trim_decimal
 from .models import Answer, Question
-from .repositories import rating_value
 
 BASE_INPUT_CLASS = (
     "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-950 "
@@ -67,13 +67,14 @@ def form_for_question(
         field = forms.CharField(
             required=required,
             initial=initial,
-            max_length=255,
+            max_length=SHORT_TEXT_MAX_LENGTH,
             widget=forms.TextInput(attrs={"class": BASE_INPUT_CLASS, "autocomplete": "off"}),
         )
     elif question.type == Question.Type.LONG_TEXT:
         field = forms.CharField(
             required=required,
             initial=initial,
+            max_length=LONG_TEXT_MAX_LENGTH,
             widget=forms.Textarea(attrs={"class": BASE_INPUT_CLASS, "rows": 5}),
         )
     elif question.type == Question.Type.NUMBER:

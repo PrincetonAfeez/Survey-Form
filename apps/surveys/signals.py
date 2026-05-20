@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -22,6 +23,12 @@ def seed_scale_choices(sender, instance: Question, created: bool, **kwargs) -> N
     elif instance.type == Question.Type.LIKERT:
         labels = LIKERT_LABELS
     elif not instance.accepts_choices:
+        if instance.answers_reference_choices():
+            raise ValidationError(
+                {
+                    "type": "Cannot change type: answers reference existing choices.",
+                }
+            )
         instance.choices.all().delete()
         return
     else:

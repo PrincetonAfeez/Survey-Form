@@ -1,5 +1,5 @@
 import pytest
-from apps.surveys.admin import AnswerInline, BranchRuleAdmin, SurveyAdmin
+from apps.surveys.admin import AnswerInline, SurveyAdmin
 from apps.surveys.models import Answer, BranchRule, Question, Survey
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
@@ -9,19 +9,9 @@ from django.test import RequestFactory
 
 
 @pytest.mark.django_db
-def test_branch_rule_admin_save_calls_full_clean(branching_survey):
+def test_branch_rule_save_calls_full_clean(branching_survey):
     survey, q1, _q2, q3, remote = branching_survey
-    site = AdminSite()
-    admin = BranchRuleAdmin(BranchRule, site)
-    factory = RequestFactory()
-    request = factory.get("/")
-    request.user = get_user_model().objects.create_superuser(
-        username="admin", email="a@a.com", password="x"
-    )
-
     bad = BranchRule(question=q1, choice=remote, next_question=q3)
-    bad.question = q1
-    # Force invalid: point to wrong survey
     other = Survey.objects.create(title="X", slug="x-admin")
     foreign = Question.objects.create(
         survey=other, order=1, text="F", type=Question.Type.SHORT_TEXT
@@ -29,7 +19,7 @@ def test_branch_rule_admin_save_calls_full_clean(branching_survey):
     bad.next_question = foreign
 
     with pytest.raises(ValidationError):
-        admin.save_model(request, bad, form=None, change=False)
+        bad.save()
 
 
 @pytest.mark.django_db

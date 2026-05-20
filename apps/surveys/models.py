@@ -4,8 +4,10 @@ from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
+from .constants import LONG_TEXT_MAX_LENGTH, SHORT_TEXT_MAX_LENGTH
 from .managers import AnswerQuerySet, ResponseQuerySet, SurveyQuerySet
 
 
@@ -70,21 +72,41 @@ class Question(models.Model):
     def __str__(self) -> str:
         return f"{self.survey}: Q{self.order}"
 
+    _CHOICE_TYPES = frozenset(
+        {
+            Type.SINGLE_CHOICE,
+            Type.MULTIPLE_CHOICE,
+            Type.RATING,
+            Type.LIKERT,
+        }
+    )
+
     @property
     def accepts_choices(self) -> bool:
-        return self.type in {
-            self.Type.SINGLE_CHOICE,
-            self.Type.MULTIPLE_CHOICE,
-            self.Type.RATING,
-            self.Type.LIKERT,
-        }
+        return self.type in self._CHOICE_TYPES
+
+    def answers_reference_choices(self) -> bool:
+        if not self.pk:
+            return False
+        return Answer.objects.filter(
+            Q(question_id=self.pk, choice__isnull=False)
+            | Q(question_id=self.pk, choices__isnull=False)
+        ).exists()
 
     def clean(self) -> None:
         errors = {}
         if self.accepts_choices and self.pk and not self.choices.exists():
             errors["type"] = "This question type requires at least one choice."
+        if self.pk and not self.accepts_choices:
+            previous_type = Question.objects.filter(pk=self.pk).values_list("type", flat=True).first()
+            if previous_type in self._CHOICE_TYPES and self.answers_reference_choices():
+                errors["type"] = "Cannot change type: answers reference existing choices."
         if errors:
             raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class Choice(models.Model):
@@ -152,6 +174,7 @@ class BranchRule(models.Model):
 
 class Response(models.Model):
     uuid = models.UUIDField(unique=True, default=uuid4, editable=False)
+    resume_nonce = models.UUIDField(default=uuid4, editable=False)
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name="responses")
     current_step = models.PositiveIntegerField(default=1)
     started_at = models.DateTimeField(auto_now_add=True)
@@ -182,6 +205,7 @@ class Response(models.Model):
 class Answer(models.Model):
     response = models.ForeignKey(Response, on_delete=models.CASCADE, related_name="answers")
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="answers")
+    question_text_snapshot = models.CharField(max_length=500, blank=True)
     text_value = models.TextField(blank=True)
     number_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     date_value = models.DateField(null=True, blank=True)
@@ -205,6 +229,10 @@ class Answer(models.Model):
     def __str__(self) -> str:
         return f"{self.response_id}: {self.question_id}"
 
+    @property
+    def question_label(self) -> str:
+        return self.question_text_snapshot or self.question.text
+
     def clean(self) -> None:
         errors = {}
         qtype = self.question.type
@@ -217,6 +245,22 @@ class Answer(models.Model):
             if has_number or has_date or has_choice:
                 errors["text_value"] = (
                     "Text answers cannot also store number, date, or choice data."
+                )
+            if (
+                qtype == Question.Type.SHORT_TEXT
+                and self.text_value
+                and len(self.text_value) > SHORT_TEXT_MAX_LENGTH
+            ):
+                errors["text_value"] = (
+                    f"Short text answers cannot exceed {SHORT_TEXT_MAX_LENGTH} characters."
+                )
+            if (
+                qtype == Question.Type.LONG_TEXT
+                and self.text_value
+                and len(self.text_value) > LONG_TEXT_MAX_LENGTH
+            ):
+                errors["text_value"] = (
+                    f"Long text answers cannot exceed {LONG_TEXT_MAX_LENGTH} characters."
                 )
         elif qtype == Question.Type.NUMBER:
             if has_text or has_date or has_choice:

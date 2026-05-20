@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from apps.surveys.admin import AnswerInline, BranchRuleAdmin
+from apps.surveys.admin import AnswerInline
 from apps.surveys.display import format_answer_value
 from apps.surveys.forms import form_for_question
 from apps.surveys.models import Answer, BranchRule, Question, Response, Survey
@@ -146,16 +146,10 @@ def test_export_json_with_completed_answer(branching_survey, staff_user, client)
 
 
 @pytest.mark.django_db
-def test_branch_rule_admin_save_valid_rule(branching_survey):
+def test_branch_rule_save_valid_rule(branching_survey):
     survey, q1, _q2, q3, remote = branching_survey
-    site = AdminSite()
-    admin = BranchRuleAdmin(BranchRule, site)
-    request = RequestFactory().get("/")
-    request.user = get_user_model().objects.create_superuser(
-        username="saver", email="s@s.com", password="x"
-    )
     rule = BranchRule.objects.get(question=q1, choice=remote)
-    admin.save_model(request, rule, form=None, change=True)
+    rule.save()
 
 
 @pytest.mark.django_db
@@ -332,6 +326,29 @@ def test_preview_404_when_survey_has_no_questions(staff_user, client):
 
 
 @pytest.mark.django_db
+def test_preview_step_redirects_when_runner_question_missing(
+    client, branching_survey, staff_user
+):
+    survey, _q1, q2, _q3, _remote = branching_survey
+    client.force_login(staff_user)
+    client.get(reverse("surveys:preview", args=[survey.slug]))
+    client.get(reverse("surveys:preview_step", args=[survey.slug, q2.order]))
+    q2.delete()
+    response = client.get(reverse("surveys:preview_step", args=[survey.slug, q2.order]))
+    assert response.status_code == 302
+    assert response["Location"].endswith(reverse("surveys:preview", args=[survey.slug]))
+
+
+@pytest.mark.django_db
+def test_preview_step_inits_path_when_session_empty(client, branching_survey, staff_user):
+    survey, q1, *_ = branching_survey
+    client.force_login(staff_user)
+    response = client.get(reverse("surveys:preview_step", args=[survey.slug, q1.order]))
+    assert response.status_code == 200
+    assert client.session[f"survey_preview_path_{survey.id}"] == [q1.id]
+
+
+@pytest.mark.django_db
 def test_preview_step_redirects_when_step_not_on_path(client, branching_survey, staff_user):
     survey, q1, q2, q3, remote = branching_survey
     client.force_login(staff_user)
@@ -385,6 +402,91 @@ def test_preview_step_back_from_first_step_goes_to_preview(client, branching_sur
 
 
 @pytest.mark.django_db
+def test_start_404_when_survey_has_no_questions(client):
+    survey = Survey.objects.create(
+        title="Empty", slug="empty-start", is_published=True
+    )
+    response = client.post(reverse("surveys:start", args=[survey.slug]))
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_start_404_when_first_question_disappears(client, branching_survey, monkeypatch):
+    from apps.surveys.repositories import SurveyRepository
+
+    survey, q1, *_ = branching_survey
+    real = SurveyRepository.get_question_by_order
+
+    def missing_first(s, order):
+        if order == q1.order:
+            return None
+        return real(s, order)
+
+    monkeypatch.setattr(SurveyRepository, "get_question_by_order", missing_first)
+    response = client.post(reverse("surveys:start", args=[survey.slug]))
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_preview_404_when_first_question_record_missing(
+    client, branching_survey, staff_user, monkeypatch
+):
+    from apps.surveys.repositories import SurveyRepository
+
+    survey, q1, *_ = branching_survey
+    client.force_login(staff_user)
+    real = SurveyRepository.get_question_by_order
+
+    def missing_first(s, order):
+        if order == q1.order:
+            return None
+        return real(s, order)
+
+    monkeypatch.setattr(SurveyRepository, "get_question_by_order", missing_first)
+    response = client.get(reverse("surveys:preview", args=[survey.slug]))
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_preview_step_redirects_when_question_deleted(staff_user, client, branching_survey):
+    survey, q1, _q2, q3, _remote = branching_survey
+    client.force_login(staff_user)
+    client.get(reverse("surveys:preview", args=[survey.slug]))
+    q1.delete()
+    response = client.get(reverse("surveys:preview_step", args=[survey.slug, 1]))
+    assert response.status_code == 302
+    assert response["Location"].endswith(reverse("surveys:preview", args=[survey.slug]))
+
+
+@pytest.mark.django_db
+def test_preview_step_post_invalid_returns_422(staff_user, client, branching_survey):
+    survey, q1, *_ = branching_survey
+    client.force_login(staff_user)
+    client.get(reverse("surveys:preview", args=[survey.slug]))
+    response = client.post(reverse("surveys:preview_step", args=[survey.slug, 1]), {})
+    assert response.status_code == 422
+
+
+@pytest.mark.django_db
+def test_published_survey_or_404_returns_published_survey(branching_survey):
+    from apps.surveys.views import _published_survey_or_404
+
+    survey, *_ = branching_survey
+    assert _published_survey_or_404(survey.slug) == survey
+
+
+@pytest.mark.django_db
+def test_published_survey_or_404_raises_for_missing_slug():
+    from apps.surveys.views import _published_survey_or_404
+
+    import pytest as pt
+    from django.http import Http404
+
+    with pt.raises(Http404):
+        _published_survey_or_404("does-not-exist")
+
+
+@pytest.mark.django_db
 def test_preview_step_back_404_for_unknown_slug(staff_user, client):
     client.force_login(staff_user)
     response = client.get(reverse("surveys:preview_step_back", args=["missing", 1]))
@@ -407,20 +509,20 @@ def test_ensure_path_rebuilds_from_answers(client, branching_survey):
 def test_record_forward_appends_when_path_tail_mismatches(branching_survey):
     from apps.surveys.views import _record_forward
 
-    survey, q1, q2, q3, remote = branching_survey
+    survey, q1, q2, q3, _remote = branching_survey
     factory = RequestFactory()
     request = factory.get("/")
     request.session = {}
-    _record_forward(request, survey, q1.order, q3.order, preview=False)
-    assert request.session[f"survey_path_{survey.id}"] == [q1.order, q3.order]
+    _record_forward(request, survey, q1, q3, preview=False)
+    assert request.session[f"survey_path_{survey.id}"] == [q1.id, q3.id]
 
-    request.session[f"survey_path_{survey.id}"] = [q1.order]
-    _record_forward(request, survey, q2.order, q3.order, preview=False)
-    assert request.session[f"survey_path_{survey.id}"] == [q1.order, q2.order, q3.order]
+    request.session[f"survey_path_{survey.id}"] = [q1.id]
+    _record_forward(request, survey, q2, q3, preview=False)
+    assert request.session[f"survey_path_{survey.id}"] == [q1.id, q2.id, q3.id]
 
-    request.session[f"survey_path_{survey.id}"] = [q1.order]
-    _record_forward(request, survey, q3.order, q3.order, preview=False)
-    assert request.session[f"survey_path_{survey.id}"] == [q1.order]
+    request.session[f"survey_path_{survey.id}"] = [q1.id]
+    _record_forward(request, survey, q3, q3, preview=False)
+    assert request.session[f"survey_path_{survey.id}"] == [q1.id]
 
 
 @pytest.mark.django_db
@@ -442,7 +544,7 @@ def test_rebuild_path_when_current_step_past_branch_end(branching_survey):
     ResponseRepository.save_answer(response, q1, {"value": remote})
     response.current_step = 99
     response.save(update_fields=["current_step"])
-    assert _rebuild_path_from_response(survey, response) == [q1.order, _q3.order]
+    assert _rebuild_path_from_response(survey, response) == [q1.id, _q3.id]
 
 
 @pytest.mark.django_db
