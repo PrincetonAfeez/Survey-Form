@@ -1,3 +1,5 @@
+""" Tests for surveys app display functions """
+
 from datetime import date
 from decimal import Decimal
 
