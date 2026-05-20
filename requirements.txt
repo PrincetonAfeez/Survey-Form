@@ -1,7 +1,10 @@
+# Runtime
 Django>=5.2,<6
 django-environ>=0.11,<1
 django-htmx>=1.19,<2
 psycopg[binary]>=3.2,<4
+
+# Dev / test
 pytest>=8.0,<9
 pytest-django>=4.8,<5
 hypothesis>=6.100,<7
