@@ -1,3 +1,5 @@
+""" Base settings for surveys app """
+
 from pathlib import Path
 
 import environ
