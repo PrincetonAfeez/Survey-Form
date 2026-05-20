@@ -1,10 +1,12 @@
+""" Tests for surveys app wizard guards """
+
 import pytest
 from apps.surveys.repositories import ResponseRepository
 from django.urls import reverse
 
 
 @pytest.mark.django_db
-def test_step_redirects_when_url_step_does_not_match_current(client, branching_survey):
+def test_step_returns_404_for_unknown_question_order(client, branching_survey):
     survey, *_ = branching_survey
     client.post(reverse("surveys:start", args=[survey.slug]))
 
@@ -18,9 +20,7 @@ def test_step_redirects_when_response_is_complete(client, branching_survey):
     client.post(reverse("surveys:start", args=[survey.slug]))
     survey_response = survey.responses.get()
     ResponseRepository.save_answer(survey_response, q1, {"value": remote})
-    ResponseRepository.save_answer(
-        survey_response, q3, {"value": q3.choices.get(label="5")}
-    )
+    ResponseRepository.save_answer(survey_response, q3, {"value": q3.choices.get(label="5")})
     ResponseRepository.complete(survey_response)
 
     response = client.get(reverse("surveys:step", args=[survey.slug, q3.order]))
@@ -34,9 +34,7 @@ def test_step_post_blocked_when_complete(client, branching_survey):
     client.post(reverse("surveys:start", args=[survey.slug]))
     survey_response = survey.responses.get()
     ResponseRepository.save_answer(survey_response, q1, {"value": remote})
-    ResponseRepository.save_answer(
-        survey_response, q3, {"value": q3.choices.get(label="5")}
-    )
+    ResponseRepository.save_answer(survey_response, q3, {"value": q3.choices.get(label="5")})
     ResponseRepository.complete(survey_response)
 
     response = client.post(
