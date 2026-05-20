@@ -1,4 +1,4 @@
-"""Targeted tests for remaining uncovered lines (99%+ goal)."""
+""" Targeted tests for remaining uncovered lines (99%+ goal) """
 
 import json
 import uuid
@@ -10,11 +10,10 @@ from apps.surveys.admin import AnswerInline
 from apps.surveys.display import format_answer_value
 from apps.surveys.forms import form_for_question
 from apps.surveys.models import Answer, BranchRule, Question, Response, Survey
-from apps.surveys.repositories import ResponseRepository
+from apps.surveys.repositories import ResponseRepository, SurveyRepository
 from apps.surveys.runners import SurveyRunner
 from apps.surveys.tokens import RESUME_SALT
 from django.contrib.admin.sites import AdminSite
-from django.contrib.auth import get_user_model
 from django.core import signing
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory
@@ -49,10 +48,10 @@ def test_resume_invalid_when_response_uuid_unknown(client, branching_survey):
 @pytest.mark.django_db
 def test_resume_invalid_when_response_belongs_to_other_survey(client, branching_survey):
     survey, *_ = branching_survey
-    other = Survey.objects.create(title="Other", slug="other-cov", is_published=True)
-    Question.objects.create(
-        survey=other, order=1, text="Other Q", type=Question.Type.SHORT_TEXT
-    )
+    other = Survey.objects.create(title="Other", slug="other-cov", is_published=False)
+    Question.objects.create(survey=other, order=1, text="Other Q", type=Question.Type.SHORT_TEXT)
+    other.is_published = True
+    other.save()
     foreign = ResponseRepository.start(other)
     # Token claims survey A but points at a response for survey B.
     token = signing.dumps({"r": str(foreign.uuid), "s": survey.id}, salt=RESUME_SALT)
@@ -94,10 +93,10 @@ def test_preview_final_non_htmx_redirect(client, branching_survey, staff_user):
 @pytest.mark.django_db
 def test_session_cleared_when_uuid_points_to_other_survey(client, branching_survey):
     survey, *_ = branching_survey
-    other = Survey.objects.create(title="Other", slug="other-sess", is_published=True)
-    Question.objects.create(
-        survey=other, order=1, text="Other Q", type=Question.Type.SHORT_TEXT
-    )
+    other = Survey.objects.create(title="Other", slug="other-sess", is_published=False)
+    Question.objects.create(survey=other, order=1, text="Other Q", type=Question.Type.SHORT_TEXT)
+    other.is_published = True
+    other.save()
     foreign = ResponseRepository.start(other)
     session = client.session
     session[f"survey_response_{survey.id}"] = str(foreign.uuid)
@@ -136,9 +135,7 @@ def test_export_json_with_completed_answer(branching_survey, staff_user, client)
     ResponseRepository.save_answer(response, q3, {"value": q3.choices.get(label="4")})
     ResponseRepository.complete(response)
     client.force_login(staff_user)
-    payload = json.loads(
-        client.get(reverse("surveys:export_json", args=[survey.id])).content
-    )
+    payload = json.loads(client.get(reverse("surveys:export_json", args=[survey.id])).content)
     assert payload[0]["answers"]
 
 
@@ -254,17 +251,15 @@ def test_progress_percent_branching_gap_with_one_answer(branching_survey):
 @pytest.mark.django_db
 def test_progress_percent_preview_mode_uses_step_minus_one(branching_survey):
     survey, *_ = branching_survey
-    runner = SurveyRunner(
-        survey, Response(survey=survey, current_step=2), record=False
-    )
+    runner = SurveyRunner(survey, Response(survey=survey, current_step=2), record=False)
     assert runner.progress_percent(2) >= 1
 
 
 @pytest.mark.django_db
 def test_start_survey_404_when_no_questions(client):
-    survey = Survey.objects.create(
-        title="Empty", slug="empty-published", is_published=True
-    )
+    survey = Survey.objects.create(title="Empty", slug="empty-published", is_published=False)
+    Survey.objects.filter(pk=survey.pk).update(is_published=True)
+    survey.refresh_from_db()
     response = client.post(reverse("surveys:start", args=[survey.slug]))
     assert response.status_code == 404
 
@@ -326,9 +321,7 @@ def test_preview_404_when_survey_has_no_questions(staff_user, client):
 
 
 @pytest.mark.django_db
-def test_preview_step_redirects_when_runner_question_missing(
-    client, branching_survey, staff_user
-):
+def test_preview_step_redirects_when_runner_question_missing(client, branching_survey, staff_user):
     survey, _q1, q2, _q3, _remote = branching_survey
     client.force_login(staff_user)
     client.get(reverse("surveys:preview", args=[survey.slug]))
@@ -369,17 +362,13 @@ def test_preview_step_back_navigation(client, branching_survey, staff_user):
         reverse("surveys:preview_step", args=[survey.slug, 1]),
         {"value": remote.id},
     )
-    response = client.get(
-        reverse("surveys:preview_step_back", args=[survey.slug, q3.order])
-    )
+    response = client.get(reverse("surveys:preview_step_back", args=[survey.slug, q3.order]))
     assert response.status_code == 302
     assert response["Location"].endswith(
         reverse("surveys:preview_step", args=[survey.slug, q1.order])
     )
 
-    response = client.get(
-        reverse("surveys:preview_step_back", args=[survey.slug, q1.order])
-    )
+    response = client.get(reverse("surveys:preview_step_back", args=[survey.slug, q1.order]))
     assert response.status_code == 302
     assert response["Location"].endswith(reverse("surveys:preview", args=[survey.slug]))
 
@@ -394,18 +383,16 @@ def test_preview_step_back_from_first_step_goes_to_preview(client, branching_sur
         {"value": remote.id},
     )
     client.get(reverse("surveys:preview_step", args=[survey.slug, q1.order]))
-    response = client.get(
-        reverse("surveys:preview_step_back", args=[survey.slug, q1.order])
-    )
+    response = client.get(reverse("surveys:preview_step_back", args=[survey.slug, q1.order]))
     assert response.status_code == 302
     assert response["Location"].endswith(reverse("surveys:preview", args=[survey.slug]))
 
 
 @pytest.mark.django_db
 def test_start_404_when_survey_has_no_questions(client):
-    survey = Survey.objects.create(
-        title="Empty", slug="empty-start", is_published=True
-    )
+    survey = Survey.objects.create(title="Empty", slug="empty-start", is_published=False)
+    Survey.objects.filter(pk=survey.pk).update(is_published=True)
+    survey.refresh_from_db()
     response = client.post(reverse("surveys:start", args=[survey.slug]))
     assert response.status_code == 404
 
@@ -468,22 +455,22 @@ def test_preview_step_post_invalid_returns_422(staff_user, client, branching_sur
 
 
 @pytest.mark.django_db
-def test_published_survey_or_404_returns_published_survey(branching_survey):
-    from apps.surveys.views import _published_survey_or_404
-
+def test_get_by_slug_returns_published_survey(branching_survey):
     survey, *_ = branching_survey
-    assert _published_survey_or_404(survey.slug) == survey
+    assert SurveyRepository.get_by_slug(survey.slug) == survey
 
 
 @pytest.mark.django_db
-def test_published_survey_or_404_raises_for_missing_slug():
-    from apps.surveys.views import _published_survey_or_404
+def test_get_by_slug_returns_none_for_missing_slug():
+    assert SurveyRepository.get_by_slug("does-not-exist") is None
 
-    import pytest as pt
-    from django.http import Http404
 
-    with pt.raises(Http404):
-        _published_survey_or_404("does-not-exist")
+@pytest.mark.django_db
+def test_survey_save_blocks_published_without_questions():
+    survey = Survey.objects.create(title="Empty", slug="empty-published", is_published=False)
+    survey.is_published = True
+    with pytest.raises(ValidationError):
+        survey.save()
 
 
 @pytest.mark.django_db
@@ -556,6 +543,4 @@ def test_start_resumes_in_progress_without_force_new(client, branching_survey):
     survey_response.save(update_fields=["current_step"])
     response = client.post(reverse("surveys:start", args=[survey.slug]))
     assert response.status_code == 302
-    assert response["Location"].endswith(
-        reverse("surveys:step", args=[survey.slug, q1.order])
-    )
+    assert response["Location"].endswith(reverse("surveys:step", args=[survey.slug, q1.order]))
