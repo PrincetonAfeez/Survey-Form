@@ -21,8 +21,6 @@ ignore = ["DJ001"]
 DJANGO_SETTINGS_MODULE = "config.settings.dev"
 python_files = ["test_*.py", "*_test.py", "tests.py"]
 testpaths = ["apps"]
-addopts = "--reuse-db"
-
 [tool.coverage.run]
 source = ["apps/surveys"]
 omit = ["*/migrations/*", "*/tests/*"]
