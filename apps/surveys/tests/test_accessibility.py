@@ -1,4 +1,4 @@
-"""Baseline accessibility markup and form wiring."""
+""" Baseline accessibility markup and form wiring """
 
 import pytest
 from apps.surveys.forms import _apply_accessibility_attrs, _error_list_id, form_for_question
