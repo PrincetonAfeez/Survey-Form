@@ -1,3 +1,5 @@
+""" Tests for surveys app template filters """
+
 from datetime import date
 
 import pytest
@@ -57,3 +59,4 @@ def test_template_filters_cover_answer_types():
     assert duration(65) == "1m 5s"
     assert duration(3660) == "1h 1m"
     assert duration("not-a-number") == "N/A"
+    assert duration(-10) == "N/A"
