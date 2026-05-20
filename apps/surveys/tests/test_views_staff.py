@@ -1,3 +1,5 @@
+""" Tests for surveys app staff views """
+
 import json
 
 import pytest
@@ -54,10 +56,10 @@ def test_resume_wrong_survey_token(client, branching_survey, db):
     survey, *_ = branching_survey
     from apps.surveys.models import Question
 
-    other = Survey.objects.create(title="Other", slug="other-resume", is_published=True)
-    Question.objects.create(
-        survey=other, order=1, text="Other Q", type=Question.Type.SHORT_TEXT
-    )
+    other = Survey.objects.create(title="Other", slug="other-resume", is_published=False)
+    Question.objects.create(survey=other, order=1, text="Other Q", type=Question.Type.SHORT_TEXT)
+    other.is_published = True
+    other.save()
     other_response = ResponseRepository.start(other)
     token = issue_resume_token(other_response)
 
