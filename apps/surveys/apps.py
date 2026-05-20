@@ -1,3 +1,5 @@
+""" Apps for surveys app """
+
 from django.apps import AppConfig
 
 
