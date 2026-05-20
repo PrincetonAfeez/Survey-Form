@@ -1,3 +1,5 @@
+""" Tests for surveys app aggregators. """
+
 from datetime import date
 from decimal import Decimal
 
@@ -120,9 +122,7 @@ def test_aggregate_text_count_vs_sample_limit(full_survey):
 @pytest.mark.django_db
 def test_aggregate_date_groups_by_week(full_survey):
     response = ResponseRepository.start(full_survey["survey"])
-    ResponseRepository.save_answer(
-        response, full_survey["date"], {"value": date(2026, 5, 16)}
-    )
+    ResponseRepository.save_answer(response, full_survey["date"], {"value": date(2026, 5, 16)})
     ResponseRepository.complete(response)
     result = aggregate_date(full_survey["date"])
     assert len(result["rows"]) >= 1
@@ -167,9 +167,7 @@ def test_aggregate_question_unsupported_type_raises():
     from apps.surveys.models import Question, Survey
 
     survey = Survey.objects.create(title="X", slug="x-agg")
-    q = Question.objects.create(
-        survey=survey, order=1, text="?", type=Question.Type.SHORT_TEXT
-    )
+    q = Question.objects.create(survey=survey, order=1, text="?", type=Question.Type.SHORT_TEXT)
     Question.objects.filter(pk=q.pk).update(type="bogus")
     q.refresh_from_db()
     with pytest.raises(ValueError, match="Unsupported"):
