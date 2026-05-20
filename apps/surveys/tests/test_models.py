@@ -1,3 +1,5 @@
+""" Tests for surveys app models """
+
 import pytest
 from apps.surveys.models import Answer, BranchRule, Choice, Question, Response, Survey
 from django.core.exceptions import ValidationError
