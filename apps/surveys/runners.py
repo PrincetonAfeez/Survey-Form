@@ -1,3 +1,5 @@
+""" SurveyRunner for surveys app """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,8 +9,9 @@ from django.db import transaction
 
 from .forms import form_for_question
 from .models import Choice, Question, Response, Survey
-from .navigation import choice_from_saved_response, next_question as navigate_next
-from .pathing import build_path_from_response, walk_path_from_response
+from .navigation import choice_from_saved_response
+from .navigation import next_question as navigate_next
+from .pathing import walk_path_from_response
 from .repositories import ResponseRepository, SurveyRepository
 
 
@@ -47,12 +50,18 @@ class SurveyRunner:
     def total_questions(self) -> int:
         return SurveyRepository.questions_for_survey(self.survey).count()
 
+    def position_for_step(self, step: int) -> int:
+        """1-indexed ordinal position of the question at `step` (order) in the survey."""
+        position = self.survey.questions.filter(order__lte=step).count()
+        return max(1, position)
+
     def progress_percent(self, step: int) -> int:
         """
         Approximate progress for the bar (ADR-0006 keeps the label as ~total).
 
-        Linear paths use question order. When branching skips orders (gap between
-        step and answers), bias upward so the last screens do not stall near 50%.
+        Uses ordinal position in the survey's question list — not the raw `order` —
+        so non-1,2,3 orders (e.g. 10/20/30) still render 0-100 correctly.
+        Biases upward when branching skips questions so the bar does not stall.
         """
         total = self.total_questions()
         if total <= 0:
@@ -60,19 +69,20 @@ class SurveyRunner:
         if not self.survey.questions.filter(order__gt=step).exists():
             return 100
 
+        position = self.position_for_step(step)
         if self.record and self.response.pk:
             answered = self.response.answers.count()
         else:
-            answered = max(0, step - 1)
+            answered = max(0, position - 1)
 
-        by_order = int(step / total * 100)
-        gap = step - answered - 1
+        by_position = min(100, int(position / total * 100))
+        gap = position - answered - 1
         if gap > 0:
-            position = answered + 1
-            by_path = min(100, int(position / (position + 1) * 100))
-            return max(by_order, by_path, 75 if answered >= 1 else by_order)
+            walked = answered + 1
+            by_path = min(100, int(walked / (walked + 1) * 100))
+            return max(by_position, by_path, 75 if answered >= 1 else by_position)
 
-        return min(99, by_order)
+        return min(99, by_position)
 
     def form_for(self, question: Question, *, data=None):
         instance = None
