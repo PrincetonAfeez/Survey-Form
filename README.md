@@ -7,10 +7,11 @@ A Django 5 survey application with a server-rendered HTMX wizard, signed resume 
 - Python 3.12+ (`pyproject.toml` requires `>=3.12`; CI uses 3.12)
 - Django 5
 - HTMX and django-htmx
-- Tailwind CSS (CDN in `templates/base.html`)
+- Tailwind CSS via the v3 CDN in `templates/base.html` (fine for local/demo; not recommended for production — no purge, larger payload, third-party dependency; swap to a built asset pipeline if you deploy)
 - django-environ for settings via `.env` / `DATABASE_URL`
 - SQLite for development; PostgreSQL-ready production settings through `DATABASE_URL`
-- pytest-django, hypothesis (property tests on aggregators), ruff, black, coverage
+- pytest-django, hypothesis (property tests on aggregators), ruff, black (local format), coverage
+- **261 tests**, **100%** line coverage on `apps/surveys` (see `pyproject.toml` / `make coverage`)
 
 ## Quick Start
 
@@ -61,13 +62,16 @@ The core domain lives in `apps/surveys/`:
 - `models.py` — surveys, questions, choices, branch rules, typed-column answers, responses
 - `repositories.py` — `SurveyRepository`, `ResponseRepository`
 - `runners.py` — `SurveyRunner` (wizard orchestration and branching)
+- `navigation.py` — branch-aware `next_question()` / `choice_from_saved_response()` (no runner import cycle)
+- `pathing.py` — session path rebuild from answers; branch-cycle detection on save
 - `forms.py` — `form_for_question()` dynamic forms per question type
-- `aggregators.py` — per-question results summaries for the staff dashboard
+- `aggregators.py` — per-question results summaries and response metrics for the staff dashboard
 - `tokens.py` — `issue_resume_token()` / `verify_resume_token()`
 - `display.py` — answer formatting for exports and raw tables
+- `templatetags/survey_extras.py` — `trim_decimal`, `duration`, `answer_display` template filters
 - `managers.py` — custom querysets (`published`, `complete`, etc.)
-- `signals.py` — auto-seed rating/likert choices on question create
-- `admin.py` — survey authoring inlines and validation
+- `signals.py` — auto-seed rating/likert choices; prune choices when a question type no longer accepts them
+- `admin.py` — survey authoring inlines, post-save validation, Preview / Results links
 
 Design notes: `docs/adr/` (seven architecture decision records). Full spec: `Survey Form.txt`.
 
@@ -94,7 +98,7 @@ make seed
 | `test` | `pytest` |
 | `lint` | `ruff check .` |
 | `format` | `black .` then `ruff check . --fix` |
-| `coverage` | `coverage run -m pytest` + report with **≥99%** on `apps/surveys` |
+| `coverage` | `coverage run -m pytest` + report with **100%** on `apps/surveys` (`pyproject.toml` `fail_under`) |
 | `seed` | `python manage.py seed_survey --with-admin` |
 
 Coverage omits migrations and tests under `apps/surveys` (see `pyproject.toml` and `Makefile`).
@@ -107,7 +111,7 @@ On Windows without `make`:
 .\.venv\Scripts\ruff check .
 .\.venv\Scripts\black .
 .\.venv\Scripts\python -m coverage run -m pytest -q
-.\.venv\Scripts\coverage report --fail-under=99 --include="apps/surveys/*" --omit="*/migrations/*,*/tests/*"
+.\.venv\Scripts\coverage report --fail-under=100 --include="apps/surveys/*" --omit="*/migrations/*,*/tests/*"
 .\.venv\Scripts\python manage.py seed_survey --with-admin
 ```
 
@@ -117,9 +121,9 @@ For production WSGI/ASGI, `config.wsgi` and `config.asgi` default to `config.set
 
 GitHub Actions workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — on push/PR to `main` or `master`:
 
-1. `ruff check .`
+1. `ruff check .` (black is available via `make format` locally; not enforced in CI)
 2. `python manage.py migrate --noinput`
-3. `coverage run -m pytest` with **fail-under=99** on `apps/surveys`
+3. `coverage run -m pytest` with **fail-under=100** on `apps/surveys`
 
 ## Accessibility
 
