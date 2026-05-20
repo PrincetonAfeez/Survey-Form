@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schema/django-survey-definition.schema.json",
+  "title": "Django survey definition export",
+  "type": "object",
+  "required": ["title", "slug", "is_published", "questions", "limits"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "slug": { "type": "string", "minLength": 1 },
+    "intro": { "type": "string" },
+    "is_published": { "type": "boolean" },
+    "limits": {
+      "type": "object",
+      "required": ["short_text_max_length", "long_text_max_length"],
+      "properties": {
+        "short_text_max_length": { "type": "integer", "minimum": 1 },
+        "long_text_max_length": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/question" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": ["order", "text", "type", "is_required"],
+      "properties": {
+        "order": { "type": "integer", "minimum": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": [
+            "short_text",
+            "long_text",
+            "single_choice",
+            "multiple_choice",
+            "rating",
+            "likert",
+            "date",
+            "number"
+          ]
+        },
+        "is_required": { "type": "boolean" },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["order", "label"],
+            "properties": {
+              "order": { "type": "integer", "minimum": 1 },
+              "label": { "type": "string", "minLength": 1, "maxLength": 200 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "branch_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["choice_order", "next_question_order"],
+            "properties": {
+              "choice_order": { "type": "integer", "minimum": 1 },
+              "next_question_order": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

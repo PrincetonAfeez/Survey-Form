@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schema/django-wizard-answer.schema.json",
+  "title": "Single wizard step payload (documentation shape)",
+  "type": "object",
+  "required": ["question_order", "question_type"],
+  "properties": {
+    "question_order": { "type": "integer", "minimum": 1 },
+    "question_type": {
+      "type": "string",
+      "enum": [
+        "short_text",
+        "long_text",
+        "single_choice",
+        "multiple_choice",
+        "rating",
+        "likert",
+        "date",
+        "number"
+      ]
+    },
+    "text": { "type": "string" },
+    "number": { "type": ["string", "null"] },
+    "date": { "type": ["string", "null"], "format": "date" },
+    "choice_id": { "type": "integer", "minimum": 1 },
+    "choice_ids": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1 }
+    }
+  },
+  "additionalProperties": false
+}
