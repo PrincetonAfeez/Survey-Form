@@ -1,3 +1,5 @@
+""" Admin for surveys app """
+
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
