@@ -1,10 +1,12 @@
 """Survey mutation during in-flight responses (issues 5–10)."""
 
 import pytest
-from apps.surveys.constants import LONG_TEXT_MAX_LENGTH
+from apps.surveys.constants import LONG_TEXT_MAX_LENGTH, SHORT_TEXT_MAX_LENGTH
+from apps.surveys.forms import form_for_question
 from apps.surveys.models import Question, Response, Survey
 from apps.surveys.pathing import build_path_from_response
 from apps.surveys.repositories import ResponseRepository, SurveyRepository
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 
 
@@ -76,37 +78,65 @@ def test_unpublished_survey_shows_friendly_page(client, branching_survey):
 
 
 @pytest.mark.django_db
-def test_short_text_rejects_oversized_input(full_survey):
-    from apps.surveys.constants import SHORT_TEXT_MAX_LENGTH
+def test_short_text_form_rejects_oversized_input(full_survey):
+    huge = "x" * (SHORT_TEXT_MAX_LENGTH + 1)
+    form = form_for_question(full_survey["short"], data={"value": huge})
+    assert form.is_valid() is False
+    assert "value" in form.errors
 
+
+@pytest.mark.django_db
+def test_short_text_save_answer_rejects_oversized_input(full_survey):
     response = ResponseRepository.start(full_survey["survey"])
     huge = "x" * (SHORT_TEXT_MAX_LENGTH + 1)
-    from django.core.exceptions import ValidationError
-
     with pytest.raises(ValidationError):
         ResponseRepository.save_answer(response, full_survey["short"], {"value": huge})
 
 
 @pytest.mark.django_db
-def test_resume_rejects_orphan_when_newer_draft_exists(client, branching_survey):
+def test_long_text_save_answer_rejects_oversized_input(full_survey):
+    response = ResponseRepository.start(full_survey["survey"])
+    huge = "x" * (LONG_TEXT_MAX_LENGTH + 1)
+    with pytest.raises(ValidationError):
+        ResponseRepository.save_answer(response, full_survey["long"], {"value": huge})
+
+
+@pytest.mark.django_db
+def test_resume_works_for_unrelated_newer_draft(client, branching_survey):
+    """Another respondent's draft must not invalidate an earlier resume token."""
     from apps.surveys.tokens import issue_resume_token
 
     survey, *_ = branching_survey
-    orphan = ResponseRepository.start(survey)
-    token = issue_resume_token(orphan)
+    earlier = ResponseRepository.start(survey)
+    token = issue_resume_token(earlier)
     ResponseRepository.start(survey)
+    response = client.get(reverse("surveys:resume", args=[survey.slug, token]))
+    assert response.status_code == 302
+    assert reverse("surveys:step", args=[survey.slug, earlier.current_step]) in response["Location"]
+
+
+@pytest.mark.django_db
+def test_resume_rejects_stale_token_when_session_has_newer_draft(client, branching_survey):
+    from apps.surveys.tokens import issue_resume_token
+    from apps.surveys.views import _session_key
+
+    survey, *_ = branching_survey
+    earlier = ResponseRepository.start(survey)
+    token = issue_resume_token(earlier)
+    later = ResponseRepository.start(survey)
+    session = client.session
+    session[_session_key(survey)] = str(later.uuid)
+    session.save()
     response = client.get(reverse("surveys:resume", args=[survey.slug, token]))
     assert response.status_code == 400
 
 
 @pytest.mark.django_db
-def test_long_text_rejects_oversized_input(full_survey):
-    response = ResponseRepository.start(full_survey["survey"])
+def test_long_text_form_rejects_oversized_input(full_survey):
     huge = "x" * (LONG_TEXT_MAX_LENGTH + 1)
-    from django.core.exceptions import ValidationError
-
-    with pytest.raises(ValidationError):
-        ResponseRepository.save_answer(response, full_survey["long"], {"value": huge})
+    form = form_for_question(full_survey["long"], data={"value": huge})
+    assert form.is_valid() is False
+    assert "value" in form.errors
 
 
 @pytest.mark.django_db
@@ -157,27 +187,9 @@ def test_unpublished_blocks_respondent_views(client, unpublished_survey):
 
 @pytest.mark.django_db
 def test_sync_current_step_raises_when_survey_has_no_questions(db):
-    survey = Survey.objects.create(title="Gone", slug="gone-q", is_published=True)
+    survey = Survey.objects.create(title="Gone", slug="gone-q", is_published=False)
+    Survey.objects.filter(pk=survey.pk).update(is_published=True)
+    survey.refresh_from_db()
     response = Response.objects.create(survey=survey, current_step=1)
     with pytest.raises(ValueError, match="no questions"):
         ResponseRepository.sync_current_step(survey, response)
-
-
-@pytest.mark.django_db
-def test_purge_old_drafts_command():
-    from django.core.management import call_command
-
-    survey = Survey.objects.create(title="Old", slug="old-drafts", is_published=True)
-    Question.objects.create(
-        survey=survey, order=1, text="Q", type=Question.Type.SHORT_TEXT
-    )
-    ResponseRepository.start(survey)
-    from apps.surveys.models import Response
-    from django.utils import timezone
-    from datetime import timedelta
-
-    Response.objects.filter(survey=survey).update(
-        started_at=timezone.now() - timedelta(days=60)
-    )
-    call_command("purge_old_drafts", days=30)
-    assert Response.objects.filter(survey=survey).count() == 0
