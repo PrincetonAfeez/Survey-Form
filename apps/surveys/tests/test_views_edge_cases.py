@@ -1,3 +1,5 @@
+""" Tests for surveys app views edge cases """
+
 import pytest
 from apps.surveys.repositories import ResponseRepository
 from django.urls import reverse
