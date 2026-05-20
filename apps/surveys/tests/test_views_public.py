@@ -1,3 +1,5 @@
+""" Tests for surveys app public views """
+
 import pytest
 from apps.surveys.repositories import ResponseRepository
 from django.urls import reverse
@@ -69,9 +71,7 @@ def test_done_page_renders(client, branching_survey):
     client.post(reverse("surveys:start", args=[survey.slug]))
     survey_response = survey.responses.get()
     ResponseRepository.save_answer(survey_response, q1, {"value": remote})
-    ResponseRepository.save_answer(
-        survey_response, q3, {"value": q3.choices.get(label="3")}
-    )
+    ResponseRepository.save_answer(survey_response, q3, {"value": q3.choices.get(label="3")})
     ResponseRepository.complete(survey_response)
     response = client.get(reverse("surveys:done", args=[survey.slug]))
     assert response.status_code == 200
