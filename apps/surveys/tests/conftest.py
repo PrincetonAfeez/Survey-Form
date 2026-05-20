@@ -1,12 +1,12 @@
+""" Test fixtures for surveys app. """
+
 import pytest
 from apps.surveys.models import BranchRule, Choice, Question, Survey
 
 
 @pytest.fixture
 def staff_user(db, django_user_model):
-    return django_user_model.objects.create_user(
-        username="staff", password="secret", is_staff=True
-    )
+    return django_user_model.objects.create_user(username="staff", password="secret", is_staff=True)
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def regular_user(db, django_user_model):
 
 @pytest.fixture
 def branching_survey(db):
-    survey = Survey.objects.create(title="Branching survey", slug="branching", is_published=True)
+    survey = Survey.objects.create(title="Branching survey", slug="branching", is_published=False)
     q1 = Question.objects.create(
         survey=survey,
         order=1,
@@ -39,6 +39,8 @@ def branching_survey(db):
         type=Question.Type.RATING,
     )
     BranchRule.objects.create(question=q1, choice=remote, next_question=q3)
+    survey.is_published = True
+    survey.save()
     return survey, q1, q2, q3, remote
 
 
@@ -49,7 +51,7 @@ def unpublished_survey(db):
 
 @pytest.fixture
 def full_survey(db):
-    survey = Survey.objects.create(title="Full", slug="full", is_published=True)
+    survey = Survey.objects.create(title="Full", slug="full", is_published=False)
     short = Question.objects.create(
         survey=survey, order=1, text="Name", type=Question.Type.SHORT_TEXT
     )
@@ -76,6 +78,8 @@ def full_survey(db):
     likert = Question.objects.create(
         survey=survey, order=8, text="Agree?", type=Question.Type.LIKERT
     )
+    survey.is_published = True
+    survey.save()
     return {
         "survey": survey,
         "short": short,
