@@ -1,3 +1,5 @@
+""" Tests for surveys app signals """
+
 import pytest
 from apps.surveys.display import format_answer_value
 from apps.surveys.models import Choice, Question, Survey
@@ -119,6 +121,21 @@ def test_question_type_change_rejected_for_multiple_choice_answers(full_survey):
         question.save()
     question.refresh_from_db()
     assert question.type == Question.Type.MULTIPLE_CHOICE
+
+
+@pytest.mark.django_db
+def test_signal_replaces_choices_when_converting_single_choice_to_rating():
+    survey = Survey.objects.create(title="Sig", slug="sig-to-rating")
+    question = Question.objects.create(
+        survey=survey, order=1, text="Pick", type=Question.Type.SINGLE_CHOICE
+    )
+    Choice.objects.create(question=question, order=1, label="Yes")
+    Choice.objects.create(question=question, order=2, label="No")
+
+    question.type = Question.Type.RATING
+    question.save()
+
+    assert list(question.choices.order_by("order").values_list("label", flat=True)) == RATING_LABELS
 
 
 @pytest.mark.django_db
