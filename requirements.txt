@@ -11,3 +11,4 @@ hypothesis>=6.100,<7
 ruff>=0.6,<1
 black>=24.0,<26
 coverage>=7.6,<8
+jsonschema>=4.23,<5
