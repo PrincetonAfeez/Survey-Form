@@ -1,4 +1,4 @@
-"""Consistency fixes: done page guard, number distribution bars."""
+""" Consistency fixes: done page guard, number distribution bars """
 
 from decimal import Decimal
 
