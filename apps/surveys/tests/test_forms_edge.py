@@ -1,3 +1,5 @@
+""" Tests for surveys app forms edge cases """
+
 from decimal import Decimal
 
 import pytest
