@@ -1,3 +1,5 @@
+""" Forms for surveys app """
+
 from __future__ import annotations
 
 from django import forms
@@ -5,6 +7,7 @@ from django import forms
 from .constants import LONG_TEXT_MAX_LENGTH, SHORT_TEXT_MAX_LENGTH
 from .lib import rating_value, trim_decimal
 from .models import Answer, Question
+from .validation import validate_answer_value
 
 BASE_INPUT_CLASS = (
     "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-950 "
@@ -35,6 +38,15 @@ class QuestionForm(forms.Form):
     def __init__(self, *args, question: Question, **kwargs):
         self.question = question
         super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.errors or "value" not in cleaned:
+            return cleaned
+        message = validate_answer_value(self.question, cleaned["value"])
+        if message:
+            self.add_error("value", message)
+        return cleaned
 
 
 def _initial_for(instance: Answer | None):
