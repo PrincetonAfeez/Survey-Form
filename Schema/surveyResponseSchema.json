@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schema/survey-response.schema.json",
+  "title": "Survey Response",
+  "description": "Schema for data submitted from a simple survey form.",
+  "type": "object",
+  "required": ["fullName", "email", "age", "role", "recommend", "comments"],
+  "properties": {
+    "fullName": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 100
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "age": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120
+    },
+    "role": {
+      "type": "string",
+      "enum": ["student", "full-time-job", "full-time-learner", "prefer-not-to-say", "other"]
+    },
+    "recommend": {
+      "type": "string",
+      "enum": ["definitely", "maybe", "not-sure"]
+    },
+    "favoriteFeature": {
+      "type": "string",
+      "enum": ["challenges", "projects", "community", "open-source", "other"]
+    },
+    "improvements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["front-end-projects", "back-end-projects", "data-visualization", "challenges", "open-source-community", "gitter-help-rooms", "videos", "city-meetups", "wiki", "forum", "additional-courses"]
+      },
+      "uniqueItems": true
+    },
+    "comments": {
+      "type": "string",
+      "maxLength": 1000
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,10 @@
+{
+  "fullName": "Jane Doe",
+  "email": "jane@example.com",
+  "age": 22,
+  "role": "student",
+  "recommend": "definitely",
+  "favoriteFeature": "projects",
+  "improvements": ["front-end-projects", "videos"],
+  "comments": "This survey form is easy to use."
+}
