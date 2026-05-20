@@ -1,3 +1,5 @@
+""" Views for surveys app """
+
 from __future__ import annotations
 
 import csv
@@ -5,7 +7,6 @@ import json
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
-from django.db import OperationalError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
@@ -14,7 +15,7 @@ from django.views.decorators.http import require_POST
 
 from .aggregators import aggregate_survey, response_metrics
 from .display import format_answer_value
-from .models import Question, Response, Survey
+from .models import Answer, Question, Response, Survey
 from .pathing import build_path_from_response
 from .repositories import ResponseRepository, SurveyRepository
 from .runners import SurveyRunner
@@ -95,7 +96,7 @@ def step(request, slug: str, step: int):
     runner = SurveyRunner(survey, response)
 
     if request.method == "POST":
-        result = _submit_with_db_retry(runner, request.POST, step=step)
+        result = runner.submit(request.POST, step=step)
         if not result.ok:
             return _render_step(
                 request, runner, question, result.form, step, status=422, preview=False
@@ -139,9 +140,9 @@ def resume(request, slug: str, token: str):
     response = ResponseRepository.for_respondent(payload.get("r"))
     if response is None or response.survey_id != survey.id:
         return render(request, "surveys/resume_invalid.html", {"survey": survey}, status=400)
-    if str(response.resume_nonce) != payload.get("n"):
-        return render(request, "surveys/resume_invalid.html", {"survey": survey}, status=400)
-    if not ResponseRepository.is_resume_allowed(survey, response):
+
+    session_uuid = request.session.get(_session_key(survey))
+    if not ResponseRepository.is_resume_allowed(response, session_uuid):
         return render(request, "surveys/resume_invalid.html", {"survey": survey}, status=400)
 
     request.session[_session_key(survey)] = str(response.uuid)
@@ -191,12 +192,10 @@ def preview_step(request, slug: str, step: int):
         _init_path(request, survey, question_at_step, preview=True)
         path = _get_path(request, survey, preview=True)
     if not _path_contains_step(survey, path, step):
-        tail = (
-            _step_for_question_id(survey, path[-1])
-            if path
-            else SurveyRepository.first_question_order(survey)
-        )
-        return redirect("surveys:preview_step", slug=survey.slug, step=tail or step)
+        resolved = _resolve_step_from_path(survey, path)
+        if resolved is None:
+            return redirect("surveys:preview", slug=survey.slug)
+        return redirect("surveys:preview_step", slug=survey.slug, step=resolved)
 
     path = _truncate_path_to_step(survey, path, step)
     _set_path(request, survey, path, preview=True)
@@ -268,14 +267,6 @@ def results_raw(request, survey_id: int):
     return render(request, template, {"survey": survey, "page": page, "query": query})
 
 
-def _csv_safe(value) -> str:
-    """Prefix spreadsheet formula triggers so Excel/LibreOffice do not execute cell text."""
-    text = "" if value is None else str(value)
-    if text and text[0] in ("=", "+", "-", "@", "\t", "\r"):
-        return "'" + text
-    return text
-
-
 @staff_member_required
 def export_csv(request, survey_id: int):
     survey = SurveyRepository.get_for_results(survey_id, request.user)
@@ -288,13 +279,10 @@ def export_csv(request, survey_id: int):
     writer = csv.writer(response)
     writer.writerow(
         [
-            _csv_safe(v)
-            for v in (
-                "response_uuid",
-                "started_at",
-                "completed_at",
-                *[q.text for q in questions],
-            )
+            "response_uuid",
+            "started_at",
+            "completed_at",
+            *[_csv_question_header(question) for question in questions],
         ]
     )
 
@@ -302,16 +290,13 @@ def export_csv(request, survey_id: int):
         answers = {answer.question_id: answer for answer in survey_response.answers.all()}
         writer.writerow(
             [
-                _csv_safe(v)
-                for v in (
-                    survey_response.uuid,
-                    survey_response.started_at,
-                    survey_response.completed_at,
-                    *[
-                        format_answer_value(answers.get(question.id))
-                        for question in questions
-                    ],
-                )
+                _csv_safe(survey_response.uuid),
+                _csv_safe(survey_response.started_at),
+                _csv_safe(survey_response.completed_at),
+                *[
+                    _csv_safe(format_answer_value(answers.get(question.id)))
+                    for question in questions
+                ],
             ]
         )
     return response
@@ -418,6 +403,7 @@ def _step_context(
             reverse("surveys:resume", args=[runner.survey.slug, token])
         )
     progress_percent = runner.progress_percent(step)
+    position = runner.position_for_step(step)
     path = _get_path(request, runner.survey, preview=preview)
     can_go_back = _can_step_back(runner.survey, path, step)
     back_url = None
@@ -436,6 +422,7 @@ def _step_context(
         "question_text": question_text,
         "form": form,
         "step": step,
+        "position": position,
         "total": total,
         "progress_percent": progress_percent,
         "action_url": action_url,
@@ -445,13 +432,6 @@ def _step_context(
         "can_go_back": can_go_back,
         "back_url": back_url,
     }
-
-
-def _published_survey_or_404(slug: str) -> Survey:
-    survey = SurveyRepository.get_by_slug(slug)
-    if survey is None:
-        raise Http404("Survey not found.")
-    return survey
 
 
 def _respondent_survey_or_response(request, slug: str):
@@ -506,13 +486,6 @@ def _step_for_question_id(survey: Survey, question_id: int) -> int | None:
     )
 
 
-def _valid_path_question_ids(survey: Survey, path: list[int]) -> list[int]:
-    if not path:
-        return []
-    valid = set(survey.questions.filter(pk__in=path).values_list("pk", flat=True))
-    return [question_id for question_id in path if question_id in valid]
-
-
 def _coerce_path_ids(raw: list) -> list[int]:
     ids: list[int] = []
     for item in raw:
@@ -521,6 +494,13 @@ def _coerce_path_ids(raw: list) -> list[int]:
         except (TypeError, ValueError):
             continue
     return ids
+
+
+def _valid_path_question_ids(survey: Survey, path: list[int]) -> list[int]:
+    if not path:
+        return []
+    valid = set(survey.questions.filter(pk__in=path).values_list("pk", flat=True))
+    return [question_id for question_id in path if question_id in valid]
 
 
 def _dedupe_adjacent_path(path: list[int]) -> list[int]:
@@ -536,6 +516,15 @@ def _dedupe_adjacent_path(path: list[int]) -> list[int]:
 def _get_path(request, survey, *, preview: bool = False) -> list[int]:
     raw = _coerce_path_ids(list(request.session.get(_path_key(survey, preview=preview), [])))
     return _valid_path_question_ids(survey, raw)
+
+
+def _resolve_step_from_path(survey: Survey, path: list[int]) -> int | None:
+    """Last valid question order on path, or first survey question."""
+    for question_id in reversed(_valid_path_question_ids(survey, path)):
+        order = _step_for_question_id(survey, question_id)
+        if order is not None:
+            return order
+    return SurveyRepository.first_question_order(survey)
 
 
 def _path_contains_step(survey: Survey, path: list[int], step: int) -> bool:
@@ -572,11 +561,37 @@ def _path_step_back(
     idx = path.index(question_id)
     previous_id = path[idx - 1]
     previous_order = _step_for_question_id(survey, previous_id)
+    if previous_order is None:
+        shortened = _valid_path_question_ids(survey, path[:idx])
+        return None, shortened
     return previous_order, path[:idx]
 
 
 def _set_path(request, survey, path: list[int], *, preview: bool = False) -> None:
-    request.session[_path_key(survey, preview=preview)] = _dedupe_adjacent_path(path)
+    cleaned = _dedupe_adjacent_path(_valid_path_question_ids(survey, path))
+    request.session[_path_key(survey, preview=preview)] = cleaned
+
+
+def _csv_safe(value) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    if text and text[0] in "=+-@\t\r":
+        return f"'{text}"
+    return text
+
+
+def _csv_question_header(question: Question) -> str:
+    snapshot = (
+        Answer.objects.filter(
+            question=question,
+            response__completed_at__isnull=False,
+        )
+        .exclude(question_text_snapshot="")
+        .values_list("question_text_snapshot", flat=True)
+        .first()
+    )
+    return snapshot or question.text
 
 
 def _init_path(request, survey, question: Question, *, preview: bool = False) -> None:
@@ -607,18 +622,6 @@ def _record_forward(
     _set_path(request, survey, path, preview=preview)
 
 
-def _submit_with_db_retry(runner: SurveyRunner, payload: dict, *, step: int):
-    """Retry once on SQLite lock contention (dev-only edge case)."""
-    for attempt in range(2):
-        try:
-            return runner.submit(payload, step=step)
-        except OperationalError:
-            if attempt == 0:
-                runner.response.refresh_from_db()
-                continue
-            raise
-
-
 def _rebuild_path_from_response(survey, response: Response) -> list[int]:
     return build_path_from_response(survey, response)
 
@@ -627,5 +630,8 @@ def _ensure_path(request, survey, response: Response) -> list[int]:
     path = _get_path(request, survey)
     if not path:
         path = _rebuild_path_from_response(survey, response)
-        _set_path(request, survey, path)
+    path = _valid_path_question_ids(survey, path)
+    if not path:
+        path = _rebuild_path_from_response(survey, response)
+    _set_path(request, survey, path)
     return path
