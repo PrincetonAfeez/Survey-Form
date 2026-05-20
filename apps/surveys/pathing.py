@@ -1,4 +1,4 @@
-"""Session path reconstruction and branch-cycle detection."""
+""" Session path reconstruction and branch-cycle detection """
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ def answered_question_ids(response: Response) -> list[int]:
     """Question primary keys with saved answers, in survey order."""
     seen: set[int] = set()
     ordered: list[int] = []
-    for question_id in (
-        response.answers.order_by("question__order").values_list("question_id", flat=True)
+    for question_id in response.answers.order_by("question__order").values_list(
+        "question_id", flat=True
     ):
         if question_id not in seen:
             seen.add(question_id)
@@ -129,6 +129,4 @@ def branch_rule_creates_cycle(rule: BranchRule) -> bool:
         on_stack.discard(node)
         return False
 
-    return any(
-        reaches_cycle(question.id) for question in questions if question.id not in visited
-    )
+    return any(reaches_cycle(question.id) for question in questions if question.id not in visited)
