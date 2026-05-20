@@ -1,9 +1,11 @@
+""" Tests for surveys app repositories """
+
 from datetime import date
 from decimal import Decimal
 
 import pytest
-from apps.surveys.models import BranchRule, Choice, Question, Survey
 from apps.surveys.lib import rating_value
+from apps.surveys.models import BranchRule, Choice, Question, Survey
 from apps.surveys.repositories import ResponseRepository, SurveyRepository
 from django.core.exceptions import ValidationError
 
@@ -93,9 +95,12 @@ def test_filter_by_answer_query_number_and_empty(branching_survey):
         ResponseRepository.list_for_survey(survey), "15"
     )
     assert hits.count() == 1
-    assert ResponseRepository.filter_by_answer_query(
-        ResponseRepository.list_for_survey(survey), ""
-    ).count() == 1
+    assert (
+        ResponseRepository.filter_by_answer_query(
+            ResponseRepository.list_for_survey(survey), ""
+        ).count()
+        == 1
+    )
 
 
 @pytest.mark.django_db
