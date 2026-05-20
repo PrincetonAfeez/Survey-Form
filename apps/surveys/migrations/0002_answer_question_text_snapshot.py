@@ -1,3 +1,5 @@
+""" Add question_text_snapshot to Answer model. """
+
 from django.db import migrations, models
 
 
