@@ -1,4 +1,4 @@
-"""Back navigation, Finish/Next label, and path session behavior."""
+""" Back navigation, Finish/Next label, and path session behavior tests """
 
 import pytest
 from apps.surveys.repositories import ResponseRepository
