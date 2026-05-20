@@ -1,3 +1,5 @@
+""" Managers for surveys app """
+
 from django.db import models
 
 
