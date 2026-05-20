@@ -1,4 +1,4 @@
-""" Forms for surveys app """
+"""Forms for surveys app"""
 
 from __future__ import annotations
 

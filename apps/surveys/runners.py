@@ -1,4 +1,4 @@
-""" SurveyRunner for surveys app """
+"""SurveyRunner for surveys app"""
 
 from __future__ import annotations
 

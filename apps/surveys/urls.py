@@ -1,4 +1,4 @@
-""" URLs for surveys app """
+"""URLs for surveys app"""
 
 from django.urls import path
 

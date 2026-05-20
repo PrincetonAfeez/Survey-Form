@@ -1,6 +1,5 @@
-""" Single source of truth for survey domain validation """
+"""Single source of truth for survey domain validation.
 
-"""
 All layers call into this module:
 - Model ``clean()`` / ``save()`` → ``validate_*`` then ``raise ValidationError``
 - Wizard forms → ``validate_answer_value()`` (same rules as ``Answer``)
@@ -63,9 +62,7 @@ def validate_question(question: Question) -> dict[str, list[str]]:
         question.accepts_choices and question.type not in Question._AUTO_SEEDED_TYPES
     )
     if needs_explicit_choices and question.pk and not question.choices.exists():
-        errors.setdefault("type", []).append(
-            "This question type requires at least one choice."
-        )
+        errors.setdefault("type", []).append("This question type requires at least one choice.")
     if question.pk and not question.accepts_choices:
         previous_type = (
             Question.objects.filter(pk=question.pk).values_list("type", flat=True).first()
@@ -81,9 +78,15 @@ def validate_answer(
     answer: Answer,
     *,
     choice_count: int | None = None,
+    multi_choice_values=None,
     check_required: bool = False,
 ) -> dict[str, list[str]]:
-    """Validate typed answer columns; optional requiredness for wizard/repository writes."""
+    """Validate typed answer columns; optional requiredness for wizard/repository writes.
+
+    ``multi_choice_values`` (iterable of ``Choice``) lets the validator also confirm
+    each selected choice belongs to the answered question. When provided, it
+    supersedes ``choice_count`` for the requiredness count.
+    """
     from .models import Question
 
     errors: dict[str, list[str]] = {}
@@ -93,7 +96,11 @@ def validate_answer(
     has_number = answer.number_value is not None
     has_date = answer.date_value is not None
     has_choice = answer.choice_id is not None
-    m2m_count = choice_count if choice_count is not None else 0
+    multi_choice_list = list(multi_choice_values) if multi_choice_values is not None else None
+    if multi_choice_list is not None:
+        m2m_count = len(multi_choice_list)
+    else:
+        m2m_count = choice_count if choice_count is not None else 0
 
     if qtype in {Question.Type.SHORT_TEXT, Question.Type.LONG_TEXT}:
         if has_number or has_date or has_choice:
@@ -139,6 +146,13 @@ def validate_answer(
             errors.setdefault("choices", []).append(
                 "Multiple-choice answers are stored only in the choices relation."
             )
+        if multi_choice_list and answer.question_id:
+            for choice in multi_choice_list:
+                if getattr(choice, "question_id", None) != answer.question_id:
+                    errors.setdefault("choices", []).append(
+                        "Selected choices must belong to the answered question."
+                    )
+                    break
 
     if (
         answer.response_id
@@ -165,8 +179,11 @@ def validate_answer_value(question: Question, value: Any) -> str | None:
 
     answer = Answer(question=question, response_id=0)
     _apply_value_to_answer(answer, question, value)
-    m2m_count = len(value) if question.type == Question.Type.MULTIPLE_CHOICE and value else 0
-    errors = validate_answer(answer, choice_count=m2m_count, check_required=True)
+    if question.type == Question.Type.MULTIPLE_CHOICE:
+        mc_values = list(value) if value else []
+        errors = validate_answer(answer, multi_choice_values=mc_values, check_required=True)
+    else:
+        errors = validate_answer(answer, check_required=True)
     if not errors:
         return None
     first_field = next(iter(errors))

@@ -1,4 +1,4 @@
-""" Tests for surveys app forms """
+"""Tests for surveys app forms"""
 
 from datetime import date
 from decimal import Decimal

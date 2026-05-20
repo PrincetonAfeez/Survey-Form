@@ -38,7 +38,15 @@ flowchart TB
 
 ## Resume tokens
 
-Resume links are signed `{response_uuid, survey_id}` tokens. A token is rejected when the **current browser session** already has a **newer** in-progress draft for the same survey (`ResponseRepository.is_resume_allowed`). Unrelated respondents (different or empty sessions) are unaffected.
+Resume links are signed `{response_uuid, survey_id}` tokens with a `DEFAULT_MAX_AGE`
+ceiling (`apps/surveys/tokens.py`). The `resume` view accepts any token whose signature
+verifies and whose `response_uuid` still resolves to a row on the named survey — there
+is no per-session "newer draft" rule, so an earlier respondent's link keeps working
+even if other respondents have since started their own drafts.
+
+If the response is complete, the resume view redirects to the done page; otherwise it
+restores the session and walks the user back to `current_step` (repaired via
+`sync_current_step` if questions were deleted in the meantime).
 
 ## Branch rules
 

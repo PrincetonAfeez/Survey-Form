@@ -1,4 +1,4 @@
-""" Test fixtures for surveys app. """
+"""Test fixtures for surveys app."""
 
 import pytest
 from apps.surveys.models import BranchRule, Choice, Question, Survey

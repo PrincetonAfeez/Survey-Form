@@ -1,4 +1,4 @@
-""" Display functions for surveys app """
+"""Display functions for surveys app"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-""" Tests for surveys app public views """
+"""Tests for surveys app public views"""
 
 import pytest
 from apps.surveys.repositories import ResponseRepository

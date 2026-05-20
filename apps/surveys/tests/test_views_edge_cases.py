@@ -1,4 +1,4 @@
-""" Tests for surveys app views edge cases """
+"""Tests for surveys app views edge cases"""
 
 import pytest
 from apps.surveys.repositories import ResponseRepository

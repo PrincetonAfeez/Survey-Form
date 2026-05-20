@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.local/schema/django-wizard-answer.schema.json",
   "title": "Single wizard step payload (documentation shape)",
+  "description": "One submitted answer from the wizard, shaped by question_type. The allowed value field depends on question_type; unrelated fields are forbidden.",
   "type": "object",
   "required": ["question_order", "question_type"],
   "properties": {
@@ -28,5 +29,90 @@
       "items": { "type": "integer", "minimum": 1 }
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "title": "text answer",
+      "properties": {
+        "question_type": { "enum": ["short_text", "long_text"] },
+        "text": { "type": "string" }
+      },
+      "required": ["text"],
+      "not": {
+        "anyOf": [
+          { "required": ["number"] },
+          { "required": ["date"] },
+          { "required": ["choice_id"] },
+          { "required": ["choice_ids"] }
+        ]
+      }
+    },
+    {
+      "title": "number answer",
+      "properties": {
+        "question_type": { "const": "number" },
+        "number": { "type": ["string", "null"] }
+      },
+      "required": ["number"],
+      "not": {
+        "anyOf": [
+          { "required": ["text"] },
+          { "required": ["date"] },
+          { "required": ["choice_id"] },
+          { "required": ["choice_ids"] }
+        ]
+      }
+    },
+    {
+      "title": "date answer",
+      "properties": {
+        "question_type": { "const": "date" },
+        "date": { "type": ["string", "null"], "format": "date" }
+      },
+      "required": ["date"],
+      "not": {
+        "anyOf": [
+          { "required": ["text"] },
+          { "required": ["number"] },
+          { "required": ["choice_id"] },
+          { "required": ["choice_ids"] }
+        ]
+      }
+    },
+    {
+      "title": "single-selection answer (single_choice, likert, rating)",
+      "properties": {
+        "question_type": { "enum": ["single_choice", "likert", "rating"] },
+        "choice_id": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["choice_id"],
+      "not": {
+        "anyOf": [
+          { "required": ["text"] },
+          { "required": ["number"] },
+          { "required": ["date"] },
+          { "required": ["choice_ids"] }
+        ]
+      }
+    },
+    {
+      "title": "multiple-choice answer",
+      "properties": {
+        "question_type": { "const": "multiple_choice" },
+        "choice_ids": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "required": ["choice_ids"],
+      "not": {
+        "anyOf": [
+          { "required": ["text"] },
+          { "required": ["number"] },
+          { "required": ["date"] },
+          { "required": ["choice_id"] }
+        ]
+      }
+    }
+  ]
 }

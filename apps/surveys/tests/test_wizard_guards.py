@@ -1,4 +1,4 @@
-""" Tests for surveys app wizard guards """
+"""Tests for surveys app wizard guards"""
 
 import pytest
 from apps.surveys.repositories import ResponseRepository

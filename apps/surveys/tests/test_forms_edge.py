@@ -1,4 +1,4 @@
-""" Tests for surveys app forms edge cases """
+"""Tests for surveys app forms edge cases"""
 
 from decimal import Decimal
 

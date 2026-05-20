@@ -1,4 +1,5 @@
-""" Tests for surveys app admin. """
+"""Tests for surveys app admin."""
+
 import pytest
 from apps.surveys.admin import AnswerInline, SurveyAdmin
 from apps.surveys.models import Answer, BranchRule, Question, Survey

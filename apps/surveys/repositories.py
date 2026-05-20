@@ -1,4 +1,4 @@
-""" Repositories for surveys app """
+"""Repositories for surveys app"""
 
 from __future__ import annotations
 
@@ -141,9 +141,15 @@ class ResponseRepository:
         elif question.type == Question.Type.RATING:
             answer.number_value = rating_value(value)
 
-        choice_count = len(value or []) if question.type == Question.Type.MULTIPLE_CHOICE else None
+        multi_choice_values = (
+            list(value or []) if question.type == Question.Type.MULTIPLE_CHOICE else None
+        )
         raise_validation_error(
-            validate_answer(answer, choice_count=choice_count, check_required=True)
+            validate_answer(
+                answer,
+                multi_choice_values=multi_choice_values,
+                check_required=True,
+            )
         )
 
         answer.save()

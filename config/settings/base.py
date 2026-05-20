@@ -1,4 +1,4 @@
-""" Base settings for surveys app """
+"""Base settings for surveys app"""
 
 from pathlib import Path
 

@@ -1,4 +1,4 @@
-""" Tokens for surveys app """
+"""Tokens for surveys app"""
 
 from django.core import signing
 

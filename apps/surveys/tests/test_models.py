@@ -1,4 +1,4 @@
-""" Tests for surveys app models """
+"""Tests for surveys app models"""
 
 import pytest
 from apps.surveys.models import Answer, BranchRule, Choice, Question, Response, Survey
@@ -189,3 +189,13 @@ def test_likert_choices_are_seeded():
         "Agree",
         "Strongly agree",
     ]
+
+
+@pytest.mark.django_db
+def test_survey_save_rolls_back_on_post_save_invariant():
+    """Survey.save wraps full_clean + super().save + post-save check in one transaction,
+    so a published survey with no questions never leaks onto disk."""
+    with pytest.raises(ValidationError) as exc:
+        Survey.objects.create(title="Empty", slug="empty-publish", is_published=True)
+    assert "is_published" in exc.value.error_dict
+    assert not Survey.objects.filter(slug="empty-publish").exists()

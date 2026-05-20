@@ -1,4 +1,4 @@
-""" Signals for surveys app """
+"""Signals for surveys app"""
 
 from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save, pre_save

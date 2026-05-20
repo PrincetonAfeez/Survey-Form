@@ -1,4 +1,4 @@
-""" Targeted tests for remaining uncovered lines (99%+ goal) """
+"""Targeted tests for remaining uncovered lines (99%+ goal)"""
 
 import json
 import uuid

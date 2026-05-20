@@ -1,4 +1,4 @@
-""" Path rebuild, answer pruning, and branch-cycle validation tests """
+"""Path rebuild, answer pruning, and branch-cycle validation tests"""
 
 import pytest
 from apps.surveys.models import BranchRule, Choice, Question, Survey

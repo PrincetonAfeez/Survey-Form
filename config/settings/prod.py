@@ -1,4 +1,4 @@
-""" Production settings for surveys app """
+"""Production settings for surveys app"""
 
 from django.core.exceptions import ImproperlyConfigured
 

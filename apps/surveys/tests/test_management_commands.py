@@ -1,4 +1,4 @@
-""" Tests for surveys app management commands """
+"""Tests for surveys app management commands"""
 
 import pytest
 from apps.surveys.models import BranchRule, Survey

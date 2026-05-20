@@ -1,4 +1,4 @@
-""" Aggregators for surveys app """
+"""Aggregators for surveys app"""
 
 from __future__ import annotations
 

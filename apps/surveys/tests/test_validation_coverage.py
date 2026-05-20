@@ -1,14 +1,9 @@
-""" Coverage for validation.py, resume policy, schema export, and management command tests """
+"""Coverage for validation.py, resume policy, schema export, and management command tests"""
 
 from unittest.mock import patch
 
 import pytest
-from django.core.management import call_command
-from django.core.management.base import CommandError
-from django.core.exceptions import ValidationError
-
 from apps.surveys.constants import LONG_TEXT_MAX_LENGTH
-
 from apps.surveys.forms import form_for_question
 from apps.surveys.models import Question
 from apps.surveys.repositories import ResponseRepository
@@ -18,6 +13,8 @@ from apps.surveys.schema_contract import (
     validate_json,
 )
 from apps.surveys.validation import validate_answer_value
+from django.core.management import call_command
+from django.core.management.base import CommandError
 
 
 @pytest.mark.django_db
@@ -59,9 +56,7 @@ def test_is_resume_allowed_unknown_session_response(branching_survey):
     survey, *_ = branching_survey
     response = ResponseRepository.start(survey)
     assert (
-        ResponseRepository.is_resume_allowed(
-            response, "00000000-0000-0000-0000-000000000099"
-        )
+        ResponseRepository.is_resume_allowed(response, "00000000-0000-0000-0000-000000000099")
         is True
     )
 

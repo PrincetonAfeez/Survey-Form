@@ -1,0 +1,86 @@
+Remaining Academic-Relevant Issues
+Survey-Form Repository Evaluation
+Repository: https://github.com/PrincetonAfeez/Survey-Form.git
+
+Context:
+This evaluation treats the project as an academic/demo Django application, not a production-grade deployment. Production-only concerns such as CDN usage, SQLite, demo credentials, and hardening settings are not treated as blockers unless they affect correctness, reproducibility, or documentation consistency.
+
+1. HIGH PRIORITY
+Issue:
+Survey.save() can still leave an invalid published survey in the database when direct model code creates Survey(is_published=True) with no questions.
+
+Why it matters:
+The documentation says Survey.objects.create(..., is_published=True) cannot leave an empty published survey, but the model saves first and then runs validate_survey_after_save(). If that post-save validation raises outside a transaction, the row may already exist.
+
+Fix:
+Wrap Survey.save() in transaction.atomic(), or reject new published surveys before save with a clear message such as: “Save as draft first, then publish after adding questions.”
+
+2. MEDIUM PRIORITY
+Issue:
+Wizard schema/export inconsistency for likert answers.
+
+Why it matters:
+export_wizard_answer() handles single choice, multiple choice, rating, text, number, and date, but likert does not appear to output a choice_id, even though Likert answers are choice-based.
+
+Fix:
+Treat LIKERT like SINGLE_CHOICE/RATING and export choice_id.
+
+3. MEDIUM PRIORITY
+Issue:
+django-wizard-answer.schema.json is too permissive.
+
+Why it matters:
+The schema allows any answer field with any question_type. For example, a number question could include choice_ids, and a likert answer can omit choice_id. For a schema folder, this weakens the academic “contract” story.
+
+Fix:
+Add oneOf or if/then rules by question_type, requiring the correct value field and forbidding unrelated fields.
+
+4. MEDIUM PRIORITY
+Issue:
+README still claims GitHub Actions CI exists, but .github/workflows/ci.yml or .github/workflows/ci.yaml could not be found on main.
+
+Why it matters:
+This is a documentation inconsistency. Academic graders often check that documented commands and files exist.
+
+Fix:
+Add the workflow file, or remove/update the CI section in README.md.
+
+5. MEDIUM PRIORITY / VERIFY LOCALLY
+Issue:
+Import sorting may still fail Ruff.
+
+Why it matters:
+pyproject.toml enables Ruff import-sorting rule I, but files such as seed_survey.py and survey_extras.py appear to place local app imports before Django imports.
+
+Fix:
+Run:
+    ruff check . --fix
+    black .
+
+6. LOW PRIORITY
+Issue:
+Resume docs say “newer in-progress draft,” but code may reject an older token if the same session has any newer response, including a completed one.
+
+Why it matters:
+This is a minor behavior/documentation mismatch. It is probably not a grading blocker, but it is easy to align.
+
+Fix:
+In is_resume_allowed(), only block when the session response is newer and incomplete.
+
+7. LOW PRIORITY
+Issue:
+Multiple-choice validation relies mostly on the form queryset, not the central validation function.
+
+Why it matters:
+For normal wizard use this is okay, but the repo says validation is centralized. validate_answer() checks required count but does not verify that all multiple-choice selections belong to the answered question.
+
+Fix:
+In save_answer(), before answer.choices.set(value), validate that every selected choice has choice.question_id == question.id.
+
+Not Academic Blockers:
+- Tailwind/HTMX CDN usage
+- SQLite for local development
+- Demo admin credentials
+- Production security hardening
+
+These are acceptable for a coursework/demo repository as long as the README clearly labels them as local/demo choices.

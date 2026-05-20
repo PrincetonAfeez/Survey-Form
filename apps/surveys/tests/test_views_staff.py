@@ -1,4 +1,4 @@
-""" Tests for surveys app staff views """
+"""Tests for surveys app staff views"""
 
 import json
 

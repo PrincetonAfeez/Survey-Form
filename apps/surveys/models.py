@@ -1,11 +1,11 @@
-""" Models for surveys app """
+"""Models for surveys app"""
 
 from __future__ import annotations
 
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -39,9 +39,13 @@ class Survey(models.Model):
         raise_validation_error(validate_survey(self))
 
     def save(self, *args, **kwargs):
-        self.full_clean()
-        super().save(*args, **kwargs)
-        raise_validation_error(validate_survey_after_save(self))
+        # Wrap both the insert/update and the post-save invariant in one transaction
+        # so a violation rolls back the row instead of leaving a published survey
+        # with no questions persisted on disk.
+        with transaction.atomic():
+            self.full_clean()
+            super().save(*args, **kwargs)
+            raise_validation_error(validate_survey_after_save(self))
 
 
 class Question(models.Model):

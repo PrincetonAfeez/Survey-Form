@@ -1,4 +1,4 @@
-""" Shared helpers with no dependency on forms, display, or repositories """
+"""Shared helpers with no dependency on forms, display, or repositories"""
 
 from __future__ import annotations
 

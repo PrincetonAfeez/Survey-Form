@@ -1,4 +1,4 @@
-""" Regression tests for smaller logic bugs C.7–C.10 """
+"""Regression tests for smaller logic bugs C.7–C.10"""
 
 from decimal import Decimal
 

@@ -1,4 +1,4 @@
-""" Tests for surveys app template filters """
+"""Tests for surveys app template filters"""
 
 from datetime import date
 

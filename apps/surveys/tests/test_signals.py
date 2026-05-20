@@ -1,4 +1,4 @@
-""" Tests for surveys app signals """
+"""Tests for surveys app signals"""
 
 import pytest
 from apps.surveys.display import format_answer_value

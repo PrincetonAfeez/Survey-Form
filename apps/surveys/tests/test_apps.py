@@ -1,4 +1,4 @@
-""" Tests for surveys app config. """
+"""Tests for surveys app config."""
 
 from apps.surveys.apps import SurveysConfig
 

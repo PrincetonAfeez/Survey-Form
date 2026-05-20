@@ -1,4 +1,4 @@
-""" Regression tests for academic-scope bug fixes """
+"""Regression tests for academic-scope bug fixes"""
 
 import pytest
 from apps.surveys.models import Question, Response, Survey

@@ -1,4 +1,4 @@
-""" Regression tests for functional bugs A.1–A.3 """
+"""Regression tests for functional bugs A.1–A.3"""
 
 import pytest
 from apps.surveys.models import BranchRule, Question, Survey

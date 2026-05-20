@@ -1,4 +1,4 @@
-""" Session path reconstruction and branch-cycle detection """
+"""Session path reconstruction and branch-cycle detection"""
 
 from __future__ import annotations
 

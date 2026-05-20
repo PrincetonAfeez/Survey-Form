@@ -1,7 +1,6 @@
 """Export a survey as JSON matching Schema/django-survey-definition.schema.json"""
-import json
 
-from django.core.management.base import BaseCommand, CommandError
+import json
 
 from apps.surveys.models import Survey
 from apps.surveys.schema_contract import (
@@ -9,6 +8,7 @@ from apps.surveys.schema_contract import (
     export_survey_definition,
     validate_json,
 )
+from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):

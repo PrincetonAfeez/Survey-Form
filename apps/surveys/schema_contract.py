@@ -1,5 +1,5 @@
-""" JSON Schema contract aligned with the Django survey models """
-"""
+"""JSON Schema contract aligned with the Django survey models.
+
 Schemas live in ``Schema/`` at the repo root. This module exports survey definitions
 and validates export payloads against those schemas (optional ``jsonschema``).
 """
@@ -34,9 +34,7 @@ QUESTION_TYPE_SCHEMA_MAP = {
 def export_survey_definition(survey: Survey) -> dict[str, Any]:
     """Serialize a survey to JSON matching ``Schema/django-survey-definition.schema.json``."""
     questions = []
-    for question in survey.questions.prefetch_related("choices", "branch_rules").order_by(
-        "order"
-    ):
+    for question in survey.questions.prefetch_related("choices", "branch_rules").order_by("order"):
         entry: dict[str, Any] = {
             "order": question.order,
             "text": question.text,
@@ -45,8 +43,7 @@ def export_survey_definition(survey: Survey) -> dict[str, Any]:
         }
         if question.accepts_choices:
             entry["choices"] = [
-                {"order": choice.order, "label": choice.label}
-                for choice in question.choices.all()
+                {"order": choice.order, "label": choice.label} for choice in question.choices.all()
             ]
         if question.type == Question.Type.SINGLE_CHOICE:
             entry["branch_rules"] = [
@@ -54,9 +51,7 @@ def export_survey_definition(survey: Survey) -> dict[str, Any]:
                     "choice_order": rule.choice.order,
                     "next_question_order": rule.next_question.order,
                 }
-                for rule in question.branch_rules.select_related(
-                    "choice", "next_question"
-                )
+                for rule in question.branch_rules.select_related("choice", "next_question")
             ]
         questions.append(entry)
 
@@ -79,10 +74,14 @@ def export_wizard_answer(question: Question, value: Any) -> dict[str, Any]:
         "question_order": question.order,
         "question_type": QUESTION_TYPE_SCHEMA_MAP[question.type],
     }
-    if question.type in {Question.Type.SINGLE_CHOICE, Question.Type.MULTIPLE_CHOICE}:
-        if question.type == Question.Type.MULTIPLE_CHOICE:
-            payload["choice_ids"] = [choice.pk for choice in value] if value else []
-        elif value is not None:
+    if question.type == Question.Type.MULTIPLE_CHOICE:
+        payload["choice_ids"] = [choice.pk for choice in value] if value else []
+    elif question.type in {
+        Question.Type.SINGLE_CHOICE,
+        Question.Type.LIKERT,
+        Question.Type.RATING,
+    }:
+        if value is not None:
             payload["choice_id"] = value.pk
     elif question.type in {Question.Type.SHORT_TEXT, Question.Type.LONG_TEXT}:
         payload["text"] = value or ""
@@ -90,8 +89,6 @@ def export_wizard_answer(question: Question, value: Any) -> dict[str, Any]:
         payload["number"] = str(value) if value is not None else None
     elif question.type == Question.Type.DATE:
         payload["date"] = value.isoformat() if value else None
-    elif question.type == Question.Type.RATING and value is not None:
-        payload["choice_id"] = value.pk
     return payload
 
 

@@ -1,4 +1,4 @@
-""" Template filters for surveys app. """
+"""Template filters for surveys app."""
 
 from apps.surveys.display import format_answer_value
 from apps.surveys.lib import trim_decimal as _trim_decimal

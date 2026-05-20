@@ -1,4 +1,4 @@
-""" Branching navigation helpers (no SurveyRunner dependency) """
+"""Branching navigation helpers (no SurveyRunner dependency)"""
 
 from __future__ import annotations
 

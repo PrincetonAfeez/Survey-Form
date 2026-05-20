@@ -1,4 +1,4 @@
-""" Development settings for surveys app """
+"""Development settings for surveys app"""
 
 from .base import *  # noqa: F403
 
