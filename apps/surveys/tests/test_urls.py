@@ -1,3 +1,5 @@
+""" Tests for surveys app URLs """
+
 import pytest
 from django.urls import resolve, reverse
 
