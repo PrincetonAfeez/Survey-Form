@@ -1,3 +1,5 @@
+"""Seed a branching demo survey."""
+
 from apps.surveys.models import BranchRule, Choice, Question, Survey
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
@@ -14,6 +16,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        # Keep the survey unpublished while we rebuild questions/choices so it never
+        # exists publicly in a "published with no questions" state. We flip
+        # is_published back on at the end, after a full_clean() passes.
         survey, _ = Survey.objects.update_or_create(
             slug="remote-work-readiness",
             defaults={
@@ -22,7 +27,7 @@ class Command(BaseCommand):
                     "A compact branching survey for evaluating workspace, tooling, "
                     "and collaboration readiness."
                 ),
-                "is_published": True,
+                "is_published": False,
             },
         )
         survey.questions.all().delete()
@@ -74,6 +79,12 @@ class Command(BaseCommand):
         )
 
         BranchRule.objects.create(question=q1, choice=remote, next_question=q3)
+
+        # Publish only after questions and choices exist, and let full_clean()
+        # confirm the invariant before flipping the flag.
+        survey.is_published = True
+        survey.full_clean()
+        survey.save(update_fields=["is_published"])
 
         self.stdout.write(self.style.SUCCESS(f"Seeded survey: /s/{survey.slug}/"))
         self.stdout.write(f"Branch demo: choosing '{remote.label}' skips question {q2.order}.")
