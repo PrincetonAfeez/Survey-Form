@@ -1,10 +1,17 @@
+""" Tests for surveys app managers """
+
 import pytest
-from apps.surveys.models import Answer, Response, Survey
+from apps.surveys.models import Answer, Question, Response, Survey
 
 
 @pytest.mark.django_db
 def test_survey_queryset_published_filters_drafts():
-    Survey.objects.create(title="Pub", slug="pub", is_published=True)
+    pub = Survey.objects.create(title="Pub", slug="pub", is_published=False)
+    Question.objects.create(
+        survey=pub, order=1, text="Q", type=Question.Type.SHORT_TEXT
+    )
+    pub.is_published = True
+    pub.save()
     Survey.objects.create(title="Draft", slug="draft", is_published=False)
 
     assert Survey.objects.published().count() == 1
@@ -18,7 +25,12 @@ def test_response_queryset_complete_and_for_survey(branching_survey):
     done = Response.objects.create(survey=survey)
     done.mark_complete()
     done.save(update_fields=["completed_at"])
-    other = Survey.objects.create(title="Other", slug="other", is_published=True)
+    other = Survey.objects.create(title="Other", slug="other", is_published=False)
+    Question.objects.create(
+        survey=other, order=1, text="Q", type=Question.Type.SHORT_TEXT
+    )
+    other.is_published = True
+    other.save()
     Response.objects.create(survey=other)
 
     scoped = Response.objects.for_survey(survey)
