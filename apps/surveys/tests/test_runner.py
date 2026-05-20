@@ -1,3 +1,5 @@
+""" Tests for surveys app runner """
+
 import pytest
 from apps.surveys.models import Answer, Response, Survey
 from apps.surveys.repositories import ResponseRepository
