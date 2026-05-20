@@ -7,7 +7,7 @@
   {% endif %}
 
   <div>
-    <label id="question-label" for="{{ form.value.id_for_label }}" tabindex="-1" class="block text-xl font-semibold leading-8 text-slate-950 dark:text-white">{{ question.text }}{% if question.is_required %}<span class="sr-only"> (required)</span>{% endif %}</label>
+    <label id="question-label" for="{{ form.value.id_for_label }}" tabindex="-1" class="block text-xl font-semibold leading-8 text-slate-950 dark:text-white">{{ question_text|default:question.text }}{% if question.is_required %}<span class="sr-only"> (required)</span>{% endif %}</label>
     <div class="mt-4">
       {{ form.value }}
     </div>
