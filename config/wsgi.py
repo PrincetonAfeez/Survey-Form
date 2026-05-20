@@ -1,9 +1,6 @@
-"""
-WSGI entrypoint for production servers (gunicorn, uwsgi, etc.).
+""" WSGI entrypoint for production servers (gunicorn, uwsgi, etc.) """
 
-Defaults to config.settings.prod. Local development uses manage.py, which sets
-config.settings.dev.
-"""
+""" Defaults to config.settings.prod. Local development uses manage.py, which sets config.settings.dev. """
 
 import os
 
