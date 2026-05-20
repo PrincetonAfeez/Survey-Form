@@ -1,4 +1,4 @@
-"""Regression tests for smaller logic bugs C.7–C.10."""
+""" Regression tests for smaller logic bugs C.7–C.10 """
 
 from decimal import Decimal
 
@@ -6,8 +6,8 @@ import pytest
 from apps.surveys.admin import ChoiceInline, QuestionAdmin
 from apps.surveys.aggregators import response_metrics
 from apps.surveys.forms import _initial_for, form_for_question
-from apps.surveys.models import Choice, Question, Response, Survey
 from apps.surveys.lib import rating_value
+from apps.surveys.models import Choice, Question, Response, Survey
 from apps.surveys.repositories import ResponseRepository
 from django.contrib.admin.sites import AdminSite
 from django.template import Context, Template
