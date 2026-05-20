@@ -1,3 +1,4 @@
+""" Tests for surveys app admin. """
 import pytest
 from apps.surveys.admin import AnswerInline, SurveyAdmin
 from apps.surveys.models import Answer, BranchRule, Question, Survey
@@ -52,13 +53,15 @@ def test_survey_admin_add_form_published_without_pk_is_valid():
 def test_survey_admin_response_change_invalid_publish_shows_message_not_500():
     from django.contrib.messages.storage.fallback import FallbackStorage
 
-    survey = Survey.objects.create(title="Bad", slug="bad-publish", is_published=True)
+    survey = Survey.objects.create(title="Bad", slug="bad-publish", is_published=False)
     Question.objects.create(
         survey=survey,
         order=1,
         text="Pick many",
         type=Question.Type.MULTIPLE_CHOICE,
     )
+    Survey.objects.filter(pk=survey.pk).update(is_published=True)
+    survey.refresh_from_db()
     site = AdminSite()
     admin = SurveyAdmin(Survey, site)
     request = RequestFactory().get("/")
