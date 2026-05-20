@@ -1,0 +1,51 @@
+{% load survey_extras %}
+<div class="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+      <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+        <tr>
+          <th class="px-4 py-3">UUID</th>
+          <th class="px-4 py-3">Started</th>
+          <th class="px-4 py-3">Completed</th>
+          <th class="px-4 py-3">Answers</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        {% for response in page.object_list %}
+          <tr>
+            <td class="max-w-xs truncate px-4 py-3 font-mono text-xs">{{ response.uuid }}</td>
+            <td class="px-4 py-3">{{ response.started_at|date:"M j, Y H:i" }}</td>
+            <td class="px-4 py-3">{% if response.completed_at %}{{ response.completed_at|date:"M j, Y H:i" }}{% else %}Draft{% endif %}</td>
+            <td class="px-4 py-3">
+              <div class="space-y-2">
+                {% for answer in response.answers.all %}
+                  <div><span class="font-medium">{{ answer.question.text }}</span>: {{ answer|answer_display }}</div>
+                {% empty %}
+                  <span class="text-slate-500">No answers</span>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">No responses found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if page.paginator.num_pages > 1 %}
+  <div class="mt-4 flex items-center justify-between text-sm">
+    {% if page.has_previous %}
+      <a hx-get="?page={{ page.previous_page_number }}&amp;q={{ query|urlencode }}" hx-target="#raw-table" href="?page={{ page.previous_page_number }}&amp;q={{ query|urlencode }}" class="rounded-md border border-slate-300 px-3 py-2 font-semibold dark:border-slate-700">Previous</a>
+    {% else %}
+      <span></span>
+    {% endif %}
+    <span class="text-slate-500">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}
+      <a hx-get="?page={{ page.next_page_number }}&amp;q={{ query|urlencode }}" hx-target="#raw-table" href="?page={{ page.next_page_number }}&amp;q={{ query|urlencode }}" class="rounded-md border border-slate-300 px-3 py-2 font-semibold dark:border-slate-700">Next</a>
+    {% else %}
+      <span></span>
+    {% endif %}
+  </div>
+{% endif %}

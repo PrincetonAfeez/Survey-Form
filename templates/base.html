@@ -1,0 +1,108 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  <title>{% block title %}Survey Form{% endblock %}</title>
+  <script>
+    if (document.cookie.includes("theme=dark")) document.documentElement.classList.add("dark");
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: "class" };
+  </script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    input[type="radio"], input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      margin-right: .625rem;
+      accent-color: #0f766e;
+    }
+    ul[id$="value"] li, #id_value div {
+      margin: .45rem 0;
+    }
+    label {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-950 antialiased dark:bg-slate-950 dark:text-slate-50">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-teal-700 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2">
+    Skip to main content
+  </a>
+  <header class="border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+      <a href="{% url 'surveys:list' %}" class="text-sm font-semibold tracking-wide text-teal-700 dark:text-teal-300">Survey Form</a>
+      <div class="flex items-center gap-2">
+        {% if request.user.is_staff %}
+          <a href="/admin/" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Admin</a>
+        {% endif %}
+        <button type="button" data-theme-toggle aria-label="Toggle color theme" class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">Theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1" class="mx-auto max-w-5xl px-4 py-8 sm:py-12">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true" class="fixed bottom-5 left-1/2 hidden -translate-x-1/2 rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-lg dark:bg-white dark:text-slate-950"></div>
+
+  <script>
+    document.body.addEventListener("htmx:configRequest", function (event) {
+      event.detail.headers["X-CSRFToken"] = "{{ csrf_token }}";
+    });
+
+    document.body.addEventListener("htmx:afterSettle", function (event) {
+      const wizard = event.detail.target.id === "wizard"
+        ? event.detail.target
+        : event.detail.target.closest("#wizard");
+      if (!wizard) return;
+      const invalid = wizard.querySelector("[aria-invalid='true']");
+      if (invalid) {
+        invalid.focus();
+        return;
+      }
+      const label = wizard.querySelector("#question-label");
+      if (label) label.focus();
+    });
+
+    document.body.addEventListener("draftSaved", function (event) {
+      const toast = document.getElementById("toast");
+      toast.textContent = event.detail.value || "Saved";
+      toast.classList.remove("hidden");
+      window.clearTimeout(window.__surveyToastTimer);
+      window.__surveyToastTimer = window.setTimeout(() => toast.classList.add("hidden"), 1800);
+    });
+
+    document.addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-copy-target]");
+      if (!button) return;
+      const target = document.querySelector(button.dataset.copyTarget);
+      if (!target) return;
+      await navigator.clipboard.writeText(target.value || target.textContent);
+      button.textContent = "Copied";
+      window.setTimeout(() => (button.textContent = "Copy"), 1200);
+    });
+
+    document.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-theme-toggle]");
+      if (!button) return;
+      const dark = document.documentElement.classList.toggle("dark");
+      document.cookie = "theme=" + (dark ? "dark" : "light") + ";path=/;max-age=31536000";
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      const backEl = document.querySelector("[data-survey-back-url]");
+      const backUrl = backEl && backEl.dataset.surveyBackUrl;
+      if (!backUrl) return;
+      event.preventDefault();
+      window.location.href = backUrl;
+    });
+  </script>
+</body>
+</html>

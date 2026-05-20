@@ -1,0 +1,31 @@
+<form method="post" action="{{ action_url }}" hx-post="{{ action_url }}" hx-target="#wizard" hx-swap="innerHTML" hx-push-url="true" novalidate aria-labelledby="question-label">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div id="survey-form-errors" role="alert" class="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+      {{ form.non_field_errors }}
+    </div>
+  {% endif %}
+
+  <div>
+    <label id="question-label" for="{{ form.value.id_for_label }}" tabindex="-1" class="block text-xl font-semibold leading-8 text-slate-950 dark:text-white">{{ question.text }}{% if question.is_required %}<span class="sr-only"> (required)</span>{% endif %}</label>
+    <div class="mt-4">
+      {{ form.value }}
+    </div>
+    {% if form.value.errors %}
+      <div id="{{ form.value.auto_id }}-errors" role="alert" class="mt-2 space-y-1">
+        {% for error in form.value.errors %}
+          <p class="text-sm font-medium text-red-700 dark:text-red-300">{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="mt-8 flex items-center justify-between gap-3">
+    {% if can_go_back and back_url %}
+      <a href="{{ back_url }}" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Back</a>
+    {% else %}
+      <span></span>
+    {% endif %}
+    <button type="submit" class="rounded-md bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900">{% if is_final_step %}Finish{% else %}Next{% endif %}</button>
+  </div>
+</form>

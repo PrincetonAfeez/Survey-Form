@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Raw Responses{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">Raw responses</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-normal">{{ survey.title }}</h1>
+    </div>
+    <a href="{% url 'surveys:results' survey.id %}" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">Dashboard</a>
+  </div>
+
+  <form class="mb-4" hx-get="{% url 'surveys:results_raw' survey.id %}" hx-target="#raw-table" hx-swap="innerHTML">
+    <input name="q" value="{{ query }}" placeholder="Search answers (text, choices, numbers, dates)" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-950 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50">
+  </form>
+
+  <div id="raw-table">
+    {% include "surveys/partials/_raw_table.html" %}
+  </div>
+{% endblock %}

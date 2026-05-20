@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load survey_extras %}
+
+{% block title %}Results: {{ survey.title }}{% endblock %}
+
+{% block content %}
+  <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-300">Results</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-normal">{{ survey.title }}</h1>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="{% url 'surveys:results_raw' survey.id %}" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">Raw</a>
+      <a href="{% url 'surveys:export_csv' survey.id %}" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">CSV</a>
+      <a href="{% url 'surveys:export_json' survey.id %}" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">JSON</a>
+    </div>
+  </div>
+
+  <div class="mb-8 grid gap-4 sm:grid-cols-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div class="text-sm text-slate-500 dark:text-slate-400">Started</div>
+      <div class="mt-2 text-2xl font-semibold">{{ metrics.started }}</div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div class="text-sm text-slate-500 dark:text-slate-400">Complete</div>
+      <div class="mt-2 text-2xl font-semibold">{{ metrics.complete }}</div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div class="text-sm text-slate-500 dark:text-slate-400">Completion</div>
+      <div class="mt-2 text-2xl font-semibold">{{ metrics.completion_rate|floatformat:0 }}%</div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div class="text-sm text-slate-500 dark:text-slate-400">Median time</div>
+      <div class="mt-2 text-2xl font-semibold">{{ metrics.median_completion_seconds|duration }}</div>
+    </div>
+  </div>
+
+  <div class="space-y-5">
+    {% for aggregate in aggregates %}
+      {% if aggregate.kind == "choice" %}
+        {% include "surveys/partials/_aggregate_choice.html" with aggregate=aggregate %}
+      {% elif aggregate.kind == "number" %}
+        {% include "surveys/partials/_aggregate_number.html" with aggregate=aggregate %}
+      {% elif aggregate.kind == "text" %}
+        {% include "surveys/partials/_aggregate_text.html" with aggregate=aggregate %}
+      {% elif aggregate.kind == "date" %}
+        {% include "surveys/partials/_aggregate_date.html" with aggregate=aggregate %}
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endblock %}
