@@ -1,4 +1,4 @@
-"""Regression tests for functional bugs A.1–A.3."""
+""" Regression tests for functional bugs A.1–A.3 """
 
 import pytest
 from apps.surveys.models import BranchRule, Question, Survey
@@ -9,9 +9,7 @@ from django.urls import reverse
 
 @pytest.fixture
 def non_one_start_survey(db):
-    survey = Survey.objects.create(
-        title="Offset orders", slug="offset-orders", is_published=True
-    )
+    survey = Survey.objects.create(title="Offset orders", slug="offset-orders", is_published=False)
     q10 = Question.objects.create(
         survey=survey,
         order=10,
@@ -25,6 +23,8 @@ def non_one_start_survey(db):
         type=Question.Type.SHORT_TEXT,
         is_required=False,
     )
+    survey.is_published = True
+    survey.save()
     return survey, q10
 
 
@@ -41,9 +41,7 @@ def test_wizard_starts_at_first_question_order(client, non_one_start_survey):
     survey, q10 = non_one_start_survey
     response = client.post(reverse("surveys:start", args=[survey.slug]))
     assert response.status_code == 302
-    assert response["Location"].endswith(
-        reverse("surveys:step", args=[survey.slug, q10.order])
-    )
+    assert response["Location"].endswith(reverse("surveys:step", args=[survey.slug, q10.order]))
 
     page = client.get(reverse("surveys:step", args=[survey.slug, q10.order]))
     assert page.status_code == 200
@@ -67,7 +65,9 @@ def test_preview_starts_at_first_question_order(client, non_one_start_survey, st
 
 @pytest.mark.django_db
 def test_start_raises_when_survey_has_no_questions(db):
-    survey = Survey.objects.create(title="Empty", slug="empty-start", is_published=True)
+    survey = Survey.objects.create(title="Empty", slug="empty-start", is_published=False)
+    Survey.objects.filter(pk=survey.pk).update(is_published=True)
+    survey.refresh_from_db()
     with pytest.raises(ValueError, match="no questions"):
         ResponseRepository.start(survey)
 
@@ -124,14 +124,21 @@ def test_survey_clean_allows_publish_when_rating_auto_seeded():
 
 
 @pytest.mark.django_db
-def test_survey_clean_skips_questions_when_unsaved():
-    survey = Survey(title="Unsaved", slug="unsaved", is_published=True)
+def test_survey_clean_skips_questions_when_unsaved_draft():
+    survey = Survey(title="Unsaved", slug="unsaved", is_published=False)
+    survey.full_clean()
+
+
+@pytest.mark.django_db
+def test_survey_clean_allows_publish_flag_before_save():
+    survey = Survey(title="New", slug="new-unsaved", is_published=True)
     survey.full_clean()
 
 
 @pytest.mark.django_db
 def test_survey_clean_blocks_publish_with_no_questions():
-    survey = Survey.objects.create(title="Empty", slug="pub-empty", is_published=True)
+    survey = Survey.objects.create(title="Empty", slug="pub-empty", is_published=False)
+    survey.is_published = True
     with pytest.raises(ValidationError) as exc:
-        survey.full_clean()
+        survey.save()
     assert "is_published" in exc.value.error_dict
