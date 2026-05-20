@@ -1,4 +1,4 @@
-"""Path rebuild, answer pruning, and branch-cycle validation."""
+""" Path rebuild, answer pruning, and branch-cycle validation tests """
 
 import pytest
 from apps.surveys.models import BranchRule, Choice, Question, Survey
@@ -28,7 +28,7 @@ def test_branch_rule_clean_rejects_two_question_cycle():
 
 @pytest.mark.django_db
 def test_build_path_terminates_when_branch_cycle_exists_in_db():
-    survey = Survey.objects.create(title="Cycle", slug="cycle-path", is_published=True)
+    survey = Survey.objects.create(title="Cycle", slug="cycle-path", is_published=False)
     q1 = Question.objects.create(
         survey=survey, order=1, text="Q1", type=Question.Type.SINGLE_CHOICE
     )
@@ -38,9 +38,9 @@ def test_build_path_terminates_when_branch_cycle_exists_in_db():
     to_q3 = Choice.objects.create(question=q1, order=1, label="Go Q3")
     to_q1 = Choice.objects.create(question=q3, order=1, label="Go Q1")
     BranchRule.objects.create(question=q1, choice=to_q3, next_question=q3)
-    BranchRule.objects.bulk_create(
-        [BranchRule(question=q3, choice=to_q1, next_question=q1)]
-    )
+    BranchRule.objects.bulk_create([BranchRule(question=q3, choice=to_q1, next_question=q1)])
+    survey.is_published = True
+    survey.save()
 
     response = ResponseRepository.start(survey)
     ResponseRepository.save_answer(response, q1, {"value": to_q3})
