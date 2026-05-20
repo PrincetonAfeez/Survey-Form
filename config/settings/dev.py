@@ -1,3 +1,5 @@
+""" Development settings for surveys app """
+
 from .base import *  # noqa: F403
 
 DEBUG = True
