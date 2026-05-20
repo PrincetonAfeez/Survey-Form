@@ -1,6 +1,9 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
+dist/
+build/
 *.sqlite3
 .coverage
 htmlcov/
@@ -11,3 +14,10 @@ staticfiles/
 .env
 media/
 *.log
+
+# Local editor / agent settings
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
