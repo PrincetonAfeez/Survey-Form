@@ -1,3 +1,5 @@
+""" Template filters for surveys app. """
+
 from apps.surveys.display import format_answer_value
 from apps.surveys.lib import trim_decimal as _trim_decimal
 from django import template
@@ -17,6 +19,8 @@ def duration(value):
     try:
         value = int(value)
     except (TypeError, ValueError):
+        return "N/A"
+    if value < 0:
         return "N/A"
     minutes, seconds = divmod(value, 60)
     hours, minutes = divmod(minutes, 60)
