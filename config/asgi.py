@@ -1,6 +1,6 @@
-"""
-ASGI entrypoint for production servers (daphne, uvicorn, etc.).
+"""ASGI entrypoint for production servers (daphne, uvicorn, etc.) """
 
+"""
 Defaults to config.settings.prod. Local development uses manage.py, which sets
 config.settings.dev.
 """
