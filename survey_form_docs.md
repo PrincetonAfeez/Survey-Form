@@ -89,11 +89,11 @@ The decision was to build a Django 5 monolith with a repository/service-style bo
 
 ### Decision 8 — Session-backed response identity with signed resume links
 
-**Chosen:** Active responses are stored in session by survey ID. A signed resume token can restore the response later.
+**Chosen:** Active responses are stored in session by survey ID. A signed resume token can restore the response later. Resume is rejected when the session already holds a **newer** in-progress draft for the same survey (`ResponseRepository.is_resume_allowed`).
 
 **Rejected:** Public editable response IDs, accounts, or login-required survey taking.
 
-**Reason:** Public surveys should be easy to take without accounts. Session state handles normal progress, and signed tokens allow controlled resume links without trusting raw URL identifiers.
+**Reason:** Public surveys should be easy to take without accounts. Session state handles normal progress, and signed tokens allow controlled resume links without trusting raw URL identifiers. Stale-token rejection prevents `force_new` from leaving misleading resume links active in the same browser.
 
 ---
 
@@ -126,7 +126,8 @@ The decision was to build a Django 5 monolith with a repository/service-style bo
 - Branching, back navigation, and resume links are implemented as first-class behavior.
 - Staff users can preview and inspect results without saving preview answers.
 - CSV/JSON exports support operational review.
-- Admin authoring has validation safeguards.
+- Admin authoring has validation safeguards (centralized in `validation.py`, surfaced via `full_clean()`).
+- JSON Schema export documents survey shape for clients and tooling.
 - Seed command creates a working branching demo.
 
 **Negative / Trade-offs:**
@@ -173,6 +174,11 @@ Survey Form is a Django 5 survey platform with a public survey wizard, branching
 **Primary UI:** Django templates + HTMX  
 **Local database:** SQLite by default  
 **Production database:** PostgreSQL-ready through `DATABASE_URL`
+
+**Supplemental docs (kept current with the codebase):**
+- `docs/validation.md` — end-to-end validation (single module)
+- `Schema/README.md` — JSON Schema export and legacy demo files
+- `README.md` — quick start, test count, CI
 
 ---
 
@@ -287,26 +293,39 @@ Survey-Form/
   apps/surveys/
     admin.py
     aggregators.py
+    constants.py
     display.py
     forms.py
+    lib.py
     managers.py
     models.py
     navigation.py
     pathing.py
     repositories.py
     runners.py
+    schema_contract.py
     signals.py
     tokens.py
     urls.py
+    validation.py
     views.py
-    management/commands/seed_survey.py
+    management/commands/
+      seed_survey.py
+      export_survey_schema.py
     templatetags/survey_extras.py
     tests/
   templates/
     base.html
     surveys/
   static/
-  docs/adr/
+  Schema/
+    django-survey-definition.schema.json
+    django-wizard-answer.schema.json
+    README.md
+  docs/
+    adr/
+    validation.md
+  .github/workflows/ci.yml
   Makefile
   requirements.txt
   pyproject.toml
@@ -349,10 +368,42 @@ pathing.py
 
 forms.py
   ├── Django forms
-  ├── display.trim_decimal
+  ├── constants (field limits for widgets)
+  ├── lib.rating_value / lib.trim_decimal
   ├── models.Answer / Question
-  └── repositories.rating_value
+  └── validation.validate_answer_value
+
+validation.py
+  ├── constants
+  ├── lib.rating_value (lazy, for rating answers)
+  └── models (lazy imports to avoid cycles)
+
+models.py
+  └── validation.validate_* / raise_validation_error
+
+schema_contract.py
+  ├── models
+  └── Schema/*.schema.json (on disk)
 ```
+
+---
+
+## Validation (single source of truth)
+
+Domain rules live in **`apps/surveys/validation.py`**. Other layers delegate; they do not re-implement publish checks, text limits, or typed-column rules.
+
+| Layer | Entry point |
+|---|---|
+| Models | `Survey` / `Question` / `Answer.clean()` → `validate_survey`, `validate_question`, `validate_answer` |
+| Model save | `Survey.save()` also runs `validate_survey_after_save()` (blocks empty published surveys after insert) |
+| Forms | `QuestionForm.clean()` → `validate_answer_value()` (includes requiredness and length) |
+| Repository | `save_answer()` → `validate_answer(..., check_required=True)` before `Answer.save()` |
+| Admin | `ValidateAfterSaveMixin` → `full_clean()` only (no duplicate rules) |
+| JSON export | `schema_contract.export_survey_definition()`; optional `jsonschema` via `validate_json()` |
+
+Full flow diagram: `docs/validation.md`.
+
+**Branch rules:** `BranchRule.clean()` stays on the model (cycles, same-survey checks) — authoring-only, separate from answer shape validation.
 
 ---
 
@@ -367,9 +418,9 @@ Fields:
 - `is_published`
 - timestamps
 
-Rules:
-- published surveys must have questions
-- choice-based questions must have choices before publication
+Rules (enforced in `validation.validate_survey` when `pk` exists, and `validate_survey_after_save` on every `save()`):
+- published surveys must have at least one question
+- choice-based questions (except auto-seeded rating/Likert) must have choices before publication
 
 ---
 
@@ -449,6 +500,7 @@ Computed:
 Fields:
 - `response`
 - `question`
+- `question_text_snapshot` (truncated copy of question text at save time; used in exports/display when wording changes)
 - `text_value`
 - `number_value`
 - `date_value`
@@ -460,6 +512,10 @@ Constraint:
 ```text
 unique answer per response/question
 ```
+
+Validation:
+- shape and cross-field rules: `validation.validate_answer()` (via `Answer.clean()` and `save_answer()`)
+- wizard requiredness: `check_required=True` on repository save and in `validate_answer_value()` for forms
 
 Type rules:
 - text questions use `text_value`
@@ -500,6 +556,28 @@ Builds a dynamic form for one question. It maps question type to a Django field 
 
 If an existing answer is supplied, it becomes the initial value.
 
+`QuestionForm.clean()` calls `validate_answer_value()` so form errors match model/repository rules (not only Django field validators).
+
+---
+
+### `validation.py`
+
+Important functions:
+- `validate_survey(survey)` / `validate_survey_after_save(survey)`
+- `validate_question(question)`
+- `validate_answer(answer, *, choice_count=None, check_required=False)`
+- `validate_answer_value(question, value)` — wizard-facing; returns first error message or `None`
+- `raise_validation_error(errors)`
+
+---
+
+### `schema_contract.py`
+
+Important functions:
+- `export_survey_definition(survey)` — JSON matching `Schema/django-survey-definition.schema.json`
+- `export_wizard_answer(question, value)` — documented single-step payload shape
+- `validate_json(instance, schema_path)` — uses `jsonschema` when installed
+
 ---
 
 ### `SurveyRepository`
@@ -521,12 +599,14 @@ Important methods:
 
 Important methods:
 - `for_respondent(uuid)`
+- `is_resume_allowed(response, session_uuid)` — `False` when session holds a newer in-progress draft for the same survey
 - `start(survey)`
 - `answer_for(response, question)`
-- `save_answer(response, question, payload)`
+- `save_answer(response, question, payload)` — validates via `validate_answer(..., check_required=True)` before persist
 - `move_to_step(response, step)`
 - `complete(response)`
-- `filter_by_answer_query(queryset, query)`
+- `sync_current_step(survey, response)` — repairs `current_step` after admin edits or missing questions
+- `filter_by_answer_query(queryset, query)` — includes `question_text_snapshot` in text search
 - `prune_answers_off_path(response, path)`
 - `list_for_survey(survey, complete_only=False)`
 
@@ -619,7 +699,7 @@ Converts typed answer storage to a display/export string.
 - Missing public survey slugs return 404.
 - Starting a survey with no questions raises 404 via `ValueError`.
 - Invalid question steps return 404 or redirect to the current safe step.
-- Invalid resume tokens render an invalid-resume page with HTTP 400.
+- Invalid resume tokens, wrong-survey tokens, or stale tokens (session has a newer draft) render `resume_invalid.html` with HTTP 400.
 - Staff-only views require `staff_member_required`.
 - Invalid branch rules raise `ValidationError`.
 - Invalid typed answer storage raises `ValidationError`.
@@ -642,6 +722,7 @@ Converts typed answer storage to a display/export string.
 | ruff | linting |
 | black | formatting |
 | coverage | coverage enforcement |
+| jsonschema | optional validation of schema exports (`export_survey_schema --validate`) |
 
 Frontend:
 - Tailwind CSS CDN
@@ -670,9 +751,8 @@ Concurrency is delegated to the WSGI/ASGI server and database. `save_answer()` u
 - No drag-and-drop survey builder.
 - Branching only supports single-choice questions.
 - Staff results are basic dashboard/export pages, not a full analytics product.
-- Response resume depends on signed links and session behavior.
+- Response resume depends on signed links and session behavior; same-browser `force_new` supersedes an older resume token.
 - Production deployment files beyond settings are minimal in the inspected files.
-- README mentions a GitHub Actions workflow, but the workflow file was not available through the connector during this inspection.
 
 ---
 
@@ -682,13 +762,15 @@ Concurrency is delegated to the WSGI/ASGI server and database. `save_answer()` u
 - **Repository pattern**
 - **Runner/use-case object**
 - **Dynamic form factory**
+- **Centralized validation module** (`validation.py`)
 - **Typed answer model**
 - **Branch-aware navigation**
 - **Session path stack**
-- **Signed token resume links**
+- **Signed token resume links** (with session-aware stale-token rejection)
 - **Staff-only reporting**
-- **Admin validation safeguards**
-- **Seed command**
+- **Admin validation safeguards** (delegate to model `full_clean()`)
+- **JSON Schema contract** (`schema_contract.py` + `Schema/`)
+- **Seed and schema export commands**
 
 ---
 
@@ -696,7 +778,9 @@ Concurrency is delegated to the WSGI/ASGI server and database. `save_answer()` u
 
 Verified evidence includes:
 - model tests for string behavior, typed-answer validation, cross-survey protection, branch-rule validation, and auto-seeded rating/Likert choices
-- README-documented 261 tests and 100% coverage target on `apps/surveys`
+- tests for `validation.py`, resume policy (`is_resume_allowed`), and schema export (`test_validation.py`, `test_schema_contract.py`, `test_validation_coverage.py`)
+- README-documented **334 tests** and **100%** line coverage on `apps/surveys` (`pyproject.toml` `fail_under=100`)
+- GitHub Actions CI: `.github/workflows/ci.yml` (ruff, migrate, pytest + coverage report)
 - coverage configuration with fail-under 100
 - Makefile targets for tests, lint, formatting, migration, coverage, and seeding
 - dynamic form behavior and accessibility attributes implemented in `forms.py`
@@ -793,6 +877,23 @@ Behavior:
 
 ---
 
+### `export_survey_schema`
+
+```bash
+python manage.py export_survey_schema <slug> [--validate]
+```
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `slug` | positional | Yes | Survey slug to export |
+| `--validate` | flag | No | Validate JSON against `Schema/django-survey-definition.schema.json` (requires `jsonschema`) |
+
+Behavior:
+- prints JSON from `schema_contract.export_survey_definition()`
+- exits non-zero on missing slug or schema validation failure
+
+---
+
 ## HTTP Input Contract
 
 ### Start survey
@@ -838,6 +939,7 @@ GET /admin-results/<id>/raw/?q=<query>&page=<page>
 
 Search matches:
 - text answers
+- `question_text_snapshot` (wording at time of answer)
 - single-choice labels
 - multiple-choice labels
 - ISO date input when parseable
@@ -890,10 +992,11 @@ A resume token encodes:
 - response UUID
 - survey ID
 
-Invalid token:
-```text
-HTTP 400
-```
+Rejected (HTTP 400, `resume_invalid.html`):
+- malformed or expired signature
+- response UUID missing or belonging to another survey
+- token survey ID does not match URL slug
+- **stale token:** current session already has a **newer** in-progress draft for this survey (e.g. after `force_new=1`); unrelated respondents are not affected
 
 Valid incomplete response:
 ```text
@@ -968,6 +1071,7 @@ The app defines no custom process exit codes.
 |---|---:|---:|
 | `python manage.py migrate` | 0 | non-zero on DB/migration error |
 | `python manage.py seed_survey` | 0 | non-zero on command/model error |
+| `python manage.py export_survey_schema <slug>` | 0 | non-zero on missing slug or `--validate` failure |
 | `python manage.py runserver` | 0 on clean exit | non-zero on startup error |
 | `pytest` | 0 | non-zero on test failure |
 | `coverage report --fail-under=100` | 0 | non-zero below threshold |
@@ -1010,6 +1114,7 @@ Runtime and tooling dependencies:
 - ruff
 - black
 - coverage
+- jsonschema (dev; optional `--validate` on `export_survey_schema`)
 
 ---
 
@@ -1048,7 +1153,7 @@ Defines:
 | Complete survey | Sets `completed_at` |
 | Completion | Prunes off-route answers |
 | Back navigation | Updates session path and `current_step` |
-| Resume link | Re-associates response UUID with current session |
+| Resume link | Re-associates response UUID with current session (rejected if session has newer draft) |
 | Preview | Uses session path but does not save answers |
 | Seed command | Recreates demo survey questions and optional admin user |
 | Admin publish/save | Validates survey/question rules |
@@ -1135,6 +1240,8 @@ A branch rule whose source question is not single-choice or whose target creates
 ## Public Python Interfaces
 
 Important internal interfaces:
+- `validate_survey` / `validate_answer` / `validate_answer_value` (`validation.py`)
+- `export_survey_definition` / `validate_json` (`schema_contract.py`)
 - `form_for_question`
 - `SurveyRepository`
 - `ResponseRepository`
@@ -1327,8 +1434,10 @@ Branch demo: choosing 'Fully remote' skips question 2.
 
 1. Start a survey.
 2. Copy the displayed resume link.
-3. Open it in the same or another browser session.
+3. Open it in another browser (or a session without a newer draft).
 4. Confirm it redirects to current step or done page.
+
+**Note:** If you start a **new** draft in the same browser (`force_new=1`), an older resume link for that survey returns HTTP 400.
 
 ---
 
@@ -1507,10 +1616,11 @@ python manage.py seed_survey --with-admin
 
 ### Resume link invalid
 
-**Trigger:** Token is malformed, expired, signed with a different secret, or points to a missing/wrong survey response.
+**Trigger:** Token is malformed, expired, signed with a different secret, points to a missing/wrong survey response, or the **session already has a newer draft** for that survey.
 
 **Fix:**
 - use a fresh resume link from the active step page
+- if you used `force_new`, use the current session’s progress instead of the old link
 
 ---
 
@@ -1690,13 +1800,13 @@ There is no custom application log file.
 ## Maintenance Notes
 
 - Keep branching single-choice unless a larger rules engine is intentionally designed.
-- Keep `Answer.clean()` aligned with new question types.
+- Keep **`validation.py`** as the single source of truth; extend `validate_answer` / `validate_survey` when adding rules — do not duplicate limits in forms or admin.
 - Add tests before adding question types or export formats.
-- Keep admin validation strong because survey authors can create invalid graphs.
+- Keep admin validation strong because survey authors can create invalid graphs (via model `full_clean()` only).
 - Replace CDN Tailwind/HTMX before serious production deployment.
-- Keep signed resume-token max age intentional.
-- Keep coverage threshold realistic and update tests with behavior changes.
-- Verify README-mentioned CI workflow exists before relying on automated enforcement.
+- Keep signed resume-token max age intentional; document session vs cross-respondent resume behavior in tests.
+- Keep coverage at 100% on `apps/surveys` and update tests with behavior changes.
+- CI is enforced via `.github/workflows/ci.yml` (ruff, migrate, pytest + coverage).
 
 ---
 
@@ -1807,6 +1917,8 @@ The third weakness is that there is no custom survey builder. Django admin is po
 - **Exports require display discipline.** One formatter keeps CSV, JSON, raw tables, and templates consistent.
 
 - **Tests define survey behavior.** Branch rules, typed answers, seeded choices, navigation, and aggregation all need tests because small mistakes can corrupt response data.
+
+- **One validation module reduces drift.** Forms, models, repository saves, and schema limits should all call `validation.py` so publish rules and answer shape stay consistent.
 
 ---
 
