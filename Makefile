@@ -21,4 +21,4 @@ format:
 
 coverage:
 	coverage run -m pytest
-	coverage report --fail-under=99 --include="apps/surveys/*" --omit="*/migrations/*,*/tests/*"
+	coverage report --fail-under=100 --include="apps/surveys/*" --omit="*/migrations/*,*/tests/*"
