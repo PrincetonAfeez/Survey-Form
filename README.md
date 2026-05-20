@@ -38,6 +38,7 @@ The demo staff user is **`admin` / `admin12345`** when seeded with `--with-admin
 - **BranchRule**-driven branching on single-choice answers
 - Signed **resume** links (`/s/<slug>/resume/<token>/`)
 - Staff **preview** mode (no answers saved): `/s/<slug>/preview/`
+  - Deep-linking to `/s/<slug>/preview/step/<order>/` without visiting `/preview/` first is supported: the session path is initialized to that step only (Back stays disabled until you navigate forward through the wizard).
 - Staff **results** dashboard, paginated **raw** responses with search, **CSV** and **JSON** exports (`/admin-results/<id>/…`)
 - Django **admin** for survey authoring (plus Preview / Results links on `Survey`)
 
@@ -76,6 +77,8 @@ The core domain lives in `apps/surveys/`:
 Design notes: `docs/adr/` (seven architecture decision records). Full spec: `Survey Form.txt`.
 
 Settings layout: `config/settings/base.py`, `dev.py`, `prod.py`.
+
+SQLite is intended for local development only; concurrent writes to the same answer can raise `OperationalError` (the step view retries once). Use PostgreSQL in production.
 
 ## Useful Commands
 
@@ -123,7 +126,7 @@ GitHub Actions workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 
 
 1. `ruff check .` (black is available via `make format` locally; not enforced in CI)
 2. `python manage.py migrate --noinput`
-3. `coverage run -m pytest` with **fail-under=100** on `apps/surveys`
+3. `coverage run -m pytest -q --create-db` then `coverage report` (**fail-under=100** on `apps/surveys`, from `pyproject.toml`)
 
 ## Accessibility
 
