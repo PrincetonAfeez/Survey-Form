@@ -1,4 +1,4 @@
-"""Branching navigation helpers (no SurveyRunner dependency)."""
+""" Branching navigation helpers (no SurveyRunner dependency) """
 
 from __future__ import annotations
 
@@ -12,9 +12,7 @@ def next_question(
     branch_target = None
     if question.type == Question.Type.SINGLE_CHOICE:
         branch_target = SurveyRepository.get_branch_target(question, answered_choice)
-    return branch_target or SurveyRepository.get_next_question_by_order(
-        survey, question.order
-    )
+    return branch_target or SurveyRepository.get_next_question_by_order(survey, question.order)
 
 
 def choice_from_saved_response(response: Response, question: Question) -> Choice | None:
